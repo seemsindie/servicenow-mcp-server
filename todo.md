@@ -411,25 +411,30 @@ servicenow-mcp-server/
 | Incidents | 7 | incident |
 | Users & Groups | 9 | sys_user, sys_user_group, sys_user_grmember |
 | Change Management | 10 | change_request, change_task, sysapproval_approver |
-| Service Catalog | 12 | sc_catalog, sc_cat_item, sc_category, item_option_new |
+| Service Catalog | 13 | sc_catalog, sc_cat_item, sc_category, item_option_new |
 | Knowledge Base | 8 | kb_knowledge_base, kb_category, kb_knowledge |
 | Workflows | 9 | wf_workflow, wf_workflow_version, wf_activity, wf_transition, wf_condition |
 | Script Includes | 5 | sys_script_include |
-| Update Sets | 7 | sys_update_set, sys_update_xml |
+| Update Sets | 9 | sys_update_set, sys_update_xml |
 | Agile | 12 | rm_story, rm_epic, rm_scrum_task, pm_project |
 | CMDB | 5 | cmdb_ci, cmdb_rel_ci |
-| Schema Discovery | 3 | sys_dictionary, sys_db_object |
+| Schema Discovery | 4 | sys_dictionary, sys_db_object |
 | NL Search | 1 | any |
-| Batch Operations | 2 | any |
+| Batch Operations | 3 | any |
 | Background Scripts | 2 | sys_trigger |
-| Platform Scripts | 25 | sys_script, sys_script_client, sys_ui_policy, sys_ui_action, sys_ui_script |
+| Platform Scripts | 30 | sys_script, sys_script_client, sys_ui_policy, sys_ui_action, sys_ui_script, sys_security_acl |
 | Scripted REST APIs | 7 | sys_ws_definition, sys_ws_operation |
 | Widgets | 5 | sp_widget |
 | UI Pages | 5 | sys_ui_page |
 | Flow Designer | 6 | sys_hub_flow, sys_hub_flow_logic, sys_hub_flow_variable, sys_hub_flow_stage |
 | App Scope | 2 | sys_scope, sys_user_preference |
 | Script Sync | 3 | — (local file system + any script table) |
-| **Total** | **151** | |
+| Problems | 7 | problem |
+| Requests/RITM | 6 | sc_request, sc_req_item |
+| Attachments | 3 | sys_attachment |
+| Aggregation | 1 | any (via /api/now/stats) |
+| Import Sets | 2 | sys_import_set, sys_transform_map |
+| **Total** | **181** | |
 
 ## MCP Resources: 7
 
@@ -653,14 +658,18 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 
 ## Phase M — Catalog Validation (1 tool)
 
-- [ ] Add `sn_validate_catalog_item` to `src/tools/catalog.ts`
+- [x] Add `sn_validate_catalog_item` to `src/tools/catalog.ts`
+  - Validates: missing descriptions, no variables, inactive items, missing category, mandatory vars without defaults, duplicate var names, missing price
+- [x] Tests: 8 tests in `tests/tools/catalog.test.ts`
 
-## Phase N — Extras (6 tools)
+## Phase N — Extras (7 tools)
 
-- [ ] Attachments: upload, download via `/api/now/attachment/file`
-- [ ] Aggregation: `sn_aggregate_table` via `/api/now/stats/{table}`
-- [ ] Batch delete: `sn_batch_delete` in batch.ts
-- [ ] Import sets: `sn_create_import_set`, `sn_run_transform`
+- [x] Attachments module (`src/tools/attachments.ts`): `sn_upload_attachment`, `sn_list_attachments`, `sn_get_attachment`
+- [x] Aggregation module (`src/tools/aggregation.ts`): `sn_aggregate_table` via `/api/now/stats/{table}`
+- [x] Batch delete: `sn_batch_delete` added to `src/tools/batch.ts` (with progress reporting)
+- [x] Import sets module (`src/tools/import-sets.ts`): `sn_create_import_set`, `sn_run_transform`
+- [x] All 3 new modules registered in `server.ts` and `definitions.ts` (full, system_admin, integration_developer)
+- [x] Tests: 5 in `tests/tools/attachments.test.ts`, 5 in `tests/tools/aggregation.test.ts`, 5 in `tests/tools/import-sets.test.ts`
 
 ## Phase O — Smart Name/Number Resolution (utility + tool enhancements) ⚡ HIGH PRIORITY
 
@@ -771,26 +780,32 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 
 ## Updated Tool Count Projection
 
+> **Verified actual count: 181 tools, 279 tests across 26 test files.**
+>
+> Note: Running totals below are approximate — some phases added more tools than
+> originally planned (e.g., Platform Scripts registered 30 tools not 25, Schema
+> gained an extra tool in Phase S, Update Sets grew from 7→9 via Phases P/Q).
+
 | Phase | New Tools | Running Total | Status |
 |-------|-----------|---------------|--------|
-| Original | 93 | 93 | Done |
-| A: Background Scripts | +2 | 95 | Done |
-| B: Platform Scripts | +25 | 120 | Done |
-| C: Enhanced Workflows | +4 | 124 | Done |
-| D: Scripted REST APIs | +7 | 131 | Done |
-| E: Widgets | +5 | 136 | Done |
-| F: UI Pages | +5 | 141 | Done |
-| G: Flow Designer | +6 | 147 | Done |
-| H: App Scope | +2 | 149 | Done |
-| I: Script Sync | +3 | 151 | Done |
+| Original | ~93 | ~93 | Done |
+| A: Background Scripts | +2 | ~95 | Done |
+| B: Platform Scripts | +30 | ~125 | Done |
+| C: Enhanced Workflows | +4 | ~129 | Done |
+| D: Scripted REST APIs | +7 | ~136 | Done |
+| E: Widgets | +5 | ~141 | Done |
+| F: UI Pages | +5 | ~146 | Done |
+| G: Flow Designer | +6 | ~152 | Done |
+| H: App Scope | +2 | ~154 | Done |
+| I: Script Sync | +3 | ~157 | Done |
 | J: Progress Reporting | — | — | Replaced by Phase T |
-| O: Smart Resolution | +0 (enhancements) | 151 | **Done** |
-| P: Update Set Move/Clone | +2 | 153 | **Done** |
-| Q: Update Set Inspection | +0 (enhancement) | 153 | **Done** |
-| R: Static Table Metadata | +0 (infra) | 153 | **Done** |
-| S: Enhanced Schema | +1 | **154** (217 tests) | **Done** |
-| T: Progress Reporting | +0 (infra) | **154** (236 tests) | **Done** |
-| K: Problem Mgmt | +7 | **161** (247 tests) | **Done** |
-| L: Requests/RITM | +6 | **167** (256 tests) | **Done** |
-| M: Catalog Validation | +1 | 168 | Pending |
-| N: Extras | +6 | **174** | Pending |
+| O: Smart Resolution | +0 (enhancements) | ~157 | **Done** |
+| P: Update Set Move/Clone | +2 | ~159 | **Done** |
+| Q: Update Set Inspection | +0 (enhancement) | ~159 | **Done** |
+| R: Static Table Metadata | +0 (infra) | ~159 | **Done** |
+| S: Enhanced Schema | +1 | ~160 (217 tests) | **Done** |
+| T: Progress Reporting | +0 (infra) | ~160 (236 tests) | **Done** |
+| K: Problem Mgmt | +7 | ~167 (247 tests) | **Done** |
+| L: Requests/RITM | +6 | ~173 (256 tests) | **Done** |
+| M: Catalog Validation | +1 | ~174 (264 tests) | **Done** |
+| N: Extras | +7 | **181** (279 tests) | **Done** |

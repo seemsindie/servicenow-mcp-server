@@ -29,6 +29,9 @@ import { registerAppScopeTools } from "./tools/app-scope.ts";
 import { registerScriptSyncTools } from "./tools/script-sync.ts";
 import { registerProblemTools } from "./tools/problems.ts";
 import { registerRequestTools } from "./tools/requests.ts";
+import { registerAttachmentTools } from "./tools/attachments.ts";
+import { registerAggregationTools } from "./tools/aggregation.ts";
+import { registerImportSetTools } from "./tools/import-sets.ts";
 
 // Resources
 import { registerResources } from "./resources/index.ts";
@@ -64,6 +67,9 @@ const TOOL_MODULES: { key: string; register: (server: McpServer, registry: Insta
   { key: "script_sync", register: registerScriptSyncTools },
   { key: "problems", register: registerProblemTools },
   { key: "requests", register: registerRequestTools },
+  { key: "attachments", register: registerAttachmentTools },
+  { key: "aggregation", register: registerAggregationTools },
+  { key: "import_sets", register: registerImportSetTools },
 ];
 
 /**

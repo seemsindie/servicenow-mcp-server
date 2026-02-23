@@ -236,6 +236,108 @@ export function registerCatalogTools(server: McpServer, registry: InstanceRegist
   );
 
   server.registerTool(
+    "sn_validate_catalog_item",
+    {
+      description: "Validate a catalog item for common issues: missing description, no variables, inactive but referenced, missing category, duplicate names, mandatory variables without defaults. Returns a list of warnings and errors.",
+      inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
+        sys_id: z.string().describe("Catalog item sys_id"),
+      },
+    },
+    async ({ instance, sys_id }) => {
+      const client = registry.resolve(instance);
+      const issues: { severity: "error" | "warning"; message: string }[] = [];
+
+      // Fetch item and its variables in parallel
+      const [item, varsResult] = await Promise.all([
+        client.getRecord("sc_cat_item", sys_id, {
+          sysparm_display_value: "true",
+          sysparm_exclude_reference_link: "true",
+        }),
+        client.queryTable("item_option_new", {
+          sysparm_query: `cat_item=${sys_id}^ORDERBYorder`,
+          sysparm_fields: "sys_id,name,question_text,type,mandatory,default_value,order,active",
+          sysparm_limit: 200,
+          sysparm_display_value: "true",
+          sysparm_exclude_reference_link: "true",
+        }),
+      ]);
+
+      const variables = varsResult.records;
+
+      // Check: missing short_description
+      if (!item["short_description"] || (item["short_description"] as string).trim() === "") {
+        issues.push({ severity: "error", message: "Missing short_description — item will be hard to find in the catalog" });
+      }
+
+      // Check: missing description
+      if (!item["description"] || (item["description"] as string).trim() === "") {
+        issues.push({ severity: "warning", message: "Missing detailed description — users may not understand what this item provides" });
+      }
+
+      // Check: no category
+      if (!item["category"] || (item["category"] as string).trim() === "") {
+        issues.push({ severity: "warning", message: "No category assigned — item may not appear in catalog navigation" });
+      }
+
+      // Check: inactive item
+      if (item["active"] === "false" || item["active"] === false) {
+        issues.push({ severity: "warning", message: "Item is inactive — it will not be visible to end users" });
+      }
+
+      // Check: no variables
+      if (variables.length === 0) {
+        issues.push({ severity: "warning", message: "No variables defined — item has no form fields for user input" });
+      }
+
+      // Check: mandatory variables without default values
+      for (const v of variables) {
+        if (v["mandatory"] === "true" || v["mandatory"] === true) {
+          if (!v["default_value"] || (v["default_value"] as string).trim() === "") {
+            issues.push({ severity: "warning", message: `Mandatory variable "${v["name"]}" (${v["question_text"]}) has no default value` });
+          }
+        }
+      }
+
+      // Check: inactive variables
+      const inactiveVars = variables.filter((v) => v["active"] === "false" || v["active"] === false);
+      if (inactiveVars.length > 0) {
+        issues.push({ severity: "warning", message: `${inactiveVars.length} inactive variable(s) found — consider removing them` });
+      }
+
+      // Check: missing price
+      if (!item["price"] || item["price"] === "0" || item["price"] === "$0.00") {
+        issues.push({ severity: "warning", message: "No price set — may cause issues with cost tracking" });
+      }
+
+      // Check for duplicate variable names
+      const varNames = variables.map((v) => v["name"] as string).filter(Boolean);
+      const dupes = varNames.filter((name, idx) => varNames.indexOf(name) !== idx);
+      if (dupes.length > 0) {
+        issues.push({ severity: "error", message: `Duplicate variable names found: ${[...new Set(dupes)].join(", ")}` });
+      }
+
+      const errors = issues.filter((i) => i.severity === "error").length;
+      const warnings = issues.filter((i) => i.severity === "warning").length;
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: JSON.stringify({
+            valid: errors === 0,
+            errors,
+            warnings,
+            issues,
+            item_name: item["name"],
+            item_sys_id: sys_id,
+            variable_count: variables.length,
+          }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.registerTool(
     "sn_get_catalog_recommendations",
     {
       description: "Get basic optimization recommendations for catalog items (items missing descriptions, inactive items, etc.).",

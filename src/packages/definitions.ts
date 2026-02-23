@@ -14,6 +14,7 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
     "widgets", "ui_pages", "flows", "app_scope", "script_sync",
     "problems",
     "requests",
+    "attachments", "aggregation", "import_sets",
   ],
 
   /** Service desk agents — incidents, users, knowledge */
@@ -46,6 +47,7 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
   /** System administrators — users, groups, schema, update sets */
   system_admin: [
     "tables", "users", "schema", "search", "batch", "app_scope", "changesets",
+    "aggregation", "import_sets", "attachments",
   ],
 
   /** Agile teams — stories, epics, tasks, projects */
@@ -57,6 +59,7 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
   integration_developer: [
     "tables", "scripts", "platform_scripts", "scripted_rest",
     "schema", "search", "batch", "background_scripts",
+    "aggregation", "import_sets", "attachments",
   ],
 
   /** Portal developers — widgets, UI pages, catalog, scripts */

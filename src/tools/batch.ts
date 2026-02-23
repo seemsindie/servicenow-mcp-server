@@ -85,4 +85,44 @@ export function registerBatchTools(server: McpServer, registry: InstanceRegistry
       };
     }
   );
+
+  server.registerTool(
+    "sn_batch_delete",
+    {
+      description: "Delete multiple records in parallel across one or more tables. Use with caution — deletions are permanent. Supports progress reporting.",
+      inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
+        deletions: z.array(z.object({
+          table: z.string().describe("Table name"),
+          sys_id: z.string().describe("Record sys_id to delete"),
+        })).describe("Array of delete operations"),
+      },
+    },
+    async ({ instance, deletions }, extra: ToolExtra) => {
+      const client = registry.resolve(instance);
+      const progress = createProgressReporter(extra, deletions.length);
+
+      const results = await Promise.allSettled(
+        deletions.map(async (op) => {
+          await client.deleteRecord(op.table, op.sys_id);
+          await progress.advance(1, `Deleted ${op.table}/${op.sys_id}`);
+          return { table: op.table, sys_id: op.sys_id, success: true };
+        })
+      );
+
+      const summary = results.map((r, i) => {
+        if (r.status === "fulfilled") return r.value;
+        return { table: deletions[i]!.table, sys_id: deletions[i]!.sys_id, success: false, error: (r.reason as Error).message };
+      });
+
+      const succeeded = summary.filter((s) => s.success).length;
+      await progress.complete(`Deleted ${succeeded}/${deletions.length} records`);
+      return {
+        content: [{
+          type: "text" as const,
+          text: JSON.stringify({ total: deletions.length, succeeded, failed: deletions.length - succeeded, results: summary }, null, 2),
+        }],
+      };
+    }
+  );
 }
