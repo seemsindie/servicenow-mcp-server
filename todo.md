@@ -1,0 +1,456 @@
+# ServiceNow MCP Server - Project Tracker
+
+> **Runtime:** Bun | **Language:** TypeScript | **Transport:** stdio + Streamable HTTP
+> **Sources:** echelon-ai-labs/servicenow-mcp, Happy-Technologies-LLC/mcp-servicenow-nodejs, michaelbuckner/servicenow-mcp, sn-11ty (sn.jace.pro)
+
+---
+
+## Research & Planning
+
+- [x] Research MCP SDK & protocol (TypeScript)
+- [x] Research echelon-ai-labs/servicenow-mcp (Python, 206 stars) — tool packages, domain coverage, SSE
+- [x] Research Happy-Technologies-LLC/mcp-servicenow-nodejs — multi-instance, schema discovery, NL search, batch ops, MCP resources, 160+ tables
+- [x] Research michaelbuckner/servicenow-mcp (Python) — clean resource URIs, NL update, script sync
+- [x] Explore sn-11ty knowledge base — encoded query operators, GlideRecord patterns, ACL model, API namespaces, 25k+ system properties, field attributes, REST API patterns
+- [x] Finalize architecture & plan
+
+---
+
+## Phase 1 — Project Scaffold
+
+- [x] Initialize bun project (`bun init`)
+- [x] `package.json` with deps: `@modelcontextprotocol/sdk`, `zod`
+- [x] `tsconfig.json` (strict, ES2022, NodeNext)
+- [x] `.gitignore`
+- [x] `.env.example`
+- [x] Directory structure: `src/`, `src/auth/`, `src/client/`, `src/tools/`, `src/resources/`, `src/packages/`, `src/utils/`, `tests/`
+
+## Phase 2 — Config Module
+
+- [x] `src/config.ts` — Zod-validated env config
+  - Instance URL, auth type, credentials
+  - Optional: multi-instance config file support
+  - Tool package selection via `SN_TOOL_PACKAGE` env var
+  - Debug mode flag
+
+## Phase 3 — Logger
+
+- [x] `src/utils/logger.ts` — stderr-only logger (critical for stdio transport)
+  - Levels: debug, info, warn, error
+  - Timestamp prefix
+  - Controlled by `SN_DEBUG` env var
+
+## Phase 4 — Auth Module
+
+- [x] `src/auth/types.ts` — `AuthProvider` interface (`getHeaders(): Promise<Record<string, string>>`)
+- [x] `src/auth/basic.ts` — Basic auth (Base64 `user:pass` → `Authorization` header)
+- [x] `src/auth/oauth.ts` — OAuth 2.0 client credentials
+  - POST to `/oauth_token.do`
+  - Token caching + auto-refresh before expiry
+  - Support for `client_id`, `client_secret`, `username`, `password`
+- [x] `src/auth/index.ts` — Factory: `createAuthProvider(config)` returns correct provider
+
+## Phase 5 — ServiceNow HTTP Client
+
+- [x] `src/client/types.ts` — API response types, pagination types, query params
+- [x] `src/client/errors.ts` — SN-specific error classes, HTTP status mapping
+  - Map SN error codes: 400 BadRequest, 401 Unauthorized, 403 Forbidden, 404 NotFound, 409 Conflict
+- [x] `src/client/index.ts` — Main client class
+  - `get()`, `post()`, `put()`, `patch()`, `delete()`
+  - Auth header injection via AuthProvider
+  - Base URL construction: `{instance_url}/api/now/table/{table}`
+  - ServiceNow query params: `sysparm_query`, `sysparm_fields`, `sysparm_limit`, `sysparm_offset`, `sysparm_display_value`, `sysparm_exclude_reference_link`, `sysparm_suppress_pagination_header`, `sysparm_query_no_domain`
+  - Response unwrapping (SN wraps in `{ result: ... }`)
+  - Pagination support via `Link` header or `X-Total-Count`
+  - Rate limit handling
+
+## Phase 6 — Encoded Query Builder Utility
+
+- [x] `src/utils/query.ts` — ServiceNow encoded query builder
+  - Operators from sn-11ty docs: `=`, `!=`, `<`, `<=`, `>`, `>=`, `LIKE`, `NOT LIKE`, `STARTSWITH`, `ENDSWITH`, `IN`, `NOT IN`, `ISEMPTY`, `ISNOTEMPTY`, `BETWEEN`, `SAMEAS`, `NSAMEAS`, `VALCHANGES`, `CHANGESFROM`, `CHANGESTO`, `GT_FIELD`, `LT_FIELD`, `MORETHAN`, `LESSTHAN`, `ANYTHING`
+  - Logical: `^` (AND), `^OR` (OR), `^NQ` (new query)
+  - `ORDERBY`, `ORDERBYDESC`
+  - Relative date operators: `RELATIVEGE`, `RELATIVELE`, etc.
+
+## Phase 7 — MCP Server Core
+
+- [x] `src/server.ts` — Server setup & modular tool registration
+  - Create `McpServer` instance with name/version
+  - Load config → create auth → create client
+  - Register tools from each module via `register(server, client)` pattern
+  - Register MCP resources
+  - Apply tool package filtering (if `SN_TOOL_PACKAGE` is set)
+
+## Phase 8 — stdio Transport Entry Point
+
+- [x] `src/index.ts` — stdio entry point
+  - `StdioServerTransport` from MCP SDK
+  - Wire up server + transport
+  - Never write to stdout (all logging to stderr)
+
+---
+
+## Phase 9 — Generic Table API Tools (5 tools)
+
+> Foundation — all domain tools build on this
+
+- [x] `src/tools/tables.ts`
+  - [ ] `sn_query_table` — Query any table with encoded query, field selection, limit, offset, order, display values
+  - [ ] `sn_get_record` — Get single record by sys_id from any table
+  - [ ] `sn_create_record` — Create a record on any table (JSON body)
+  - [ ] `sn_update_record` — Update a record by sys_id on any table
+  - [ ] `sn_delete_record` — Delete a record by sys_id from any table
+
+## Phase 10 — Incident Management Tools (7 tools)
+
+- [x] `src/tools/incidents.ts`
+  - [ ] `sn_list_incidents` — List with filters (state, priority, assignment_group, assigned_to, category)
+  - [ ] `sn_create_incident` — Create with short_description, description, urgency, impact, category, subcategory, assignment_group, assigned_to, caller_id
+  - [ ] `sn_update_incident` — Update any incident fields
+  - [ ] `sn_add_incident_comment` — Add customer-visible comment (comments field)
+  - [ ] `sn_add_incident_work_notes` — Add internal work notes (work_notes field)
+  - [ ] `sn_resolve_incident` — Set state=6, resolution_code, resolution_notes, close_code
+  - [ ] `sn_close_incident` — Set state=7, close_code, close_notes
+
+## Phase 11 — User & Group Management Tools (9 tools)
+
+- [x] `src/tools/users.ts`
+  - [ ] `sn_list_users` — Filter by active, department, role, name
+  - [ ] `sn_get_user` — By sys_id, user_name, or email
+  - [ ] `sn_create_user` — With user_name, first_name, last_name, email, department, title, manager
+  - [ ] `sn_update_user` — Update any user fields
+  - [ ] `sn_list_groups` — Filter by name, type, active
+  - [ ] `sn_create_group` — With name, description, manager, parent, type
+  - [ ] `sn_update_group` — Update any group fields
+  - [ ] `sn_add_group_members` — Add user(s) to sys_user_grmember
+  - [ ] `sn_remove_group_members` — Remove user(s) from sys_user_grmember
+
+## Phase 12 — Change Management Tools (10 tools)
+
+- [x] `src/tools/changes.ts`
+  - [ ] `sn_list_change_requests` — Filter by type (normal/standard/emergency), state, risk, assignment_group
+  - [ ] `sn_get_change_request` — Details by sys_id or number
+  - [ ] `sn_create_change_request` — With type, short_description, description, risk, impact, start_date, end_date, assignment_group
+  - [ ] `sn_update_change_request` — Update any fields
+  - [ ] `sn_add_change_task` — Create change_task linked to parent change
+  - [ ] `sn_submit_change_for_approval` — Set state to appropriate approval state
+  - [ ] `sn_approve_change` — Update sysapproval_approver record
+  - [ ] `sn_reject_change` — Reject via sysapproval_approver
+  - [ ] `sn_add_change_comment` — Customer-visible comment
+  - [ ] `sn_add_change_work_notes` — Internal work notes
+
+## Phase 13 — Service Catalog Tools (12 tools)
+
+- [x] `src/tools/catalog.ts`
+  - [ ] `sn_list_catalogs` — List sc_catalog records
+  - [ ] `sn_list_catalog_items` — List sc_cat_item with category filter
+  - [ ] `sn_get_catalog_item` — Get item details + variables
+  - [ ] `sn_update_catalog_item` — Update item fields
+  - [ ] `sn_list_catalog_categories` — List sc_category records
+  - [ ] `sn_create_catalog_category` — Create category with title, parent, catalog
+  - [ ] `sn_update_catalog_category` — Update category
+  - [ ] `sn_move_catalog_items` — Move items between categories
+  - [ ] `sn_create_catalog_variable` — Create item_option_new record (variable types: string, integer, boolean, reference, select, multi_select, etc.)
+  - [ ] `sn_list_catalog_variables` — List variables for a catalog item
+  - [ ] `sn_update_catalog_variable` — Update variable properties
+  - [ ] `sn_get_catalog_recommendations` — Basic optimization analysis
+
+## Phase 14 — Knowledge Base Tools (8 tools)
+
+- [x] `src/tools/knowledge.ts`
+  - [ ] `sn_list_knowledge_bases` — List kb_knowledge_base records
+  - [ ] `sn_create_knowledge_base` — Create a knowledge base
+  - [ ] `sn_create_kb_category` — Create kb_category record
+  - [ ] `sn_list_articles` — List kb_knowledge with filters (kb, category, workflow_state)
+  - [ ] `sn_get_article` — Get article by sys_id or number
+  - [ ] `sn_create_article` — Create with title, text, kb_category, kb_knowledge_base
+  - [ ] `sn_update_article` — Update article fields
+  - [ ] `sn_publish_article` — Set workflow_state to published
+
+## Phase 15 — Workflow Management Tools (5 tools)
+
+- [x] `src/tools/workflows.ts`
+  - [ ] `sn_list_workflows` — List wf_workflow records
+  - [ ] `sn_get_workflow` — Get workflow with activities (wf_activity)
+  - [ ] `sn_create_workflow` — Create wf_workflow record
+  - [ ] `sn_update_workflow` — Update workflow
+  - [ ] `sn_delete_workflow` — Delete workflow
+
+## Phase 16 — Script Include Tools (5 tools)
+
+- [x] `src/tools/scripts.ts`
+  - [ ] `sn_list_script_includes` — List sys_script_include with filters
+  - [ ] `sn_get_script_include` — Get script include by sys_id or name
+  - [ ] `sn_create_script_include` — Create with name, script, api_name, active, accessible_from
+  - [ ] `sn_update_script_include` — Update (commonly used to push script content)
+  - [ ] `sn_delete_script_include` — Delete
+
+## Phase 17 — Update Set / Changeset Tools (7 tools)
+
+- [x] `src/tools/changesets.ts`
+  - [ ] `sn_list_update_sets` — List sys_update_set with state filter
+  - [ ] `sn_get_update_set` — Get details including sys_update_xml records
+  - [ ] `sn_create_update_set` — Create with name, description, application
+  - [ ] `sn_update_update_set` — Update fields
+  - [ ] `sn_set_current_update_set` — Set as current (user preference)
+  - [ ] `sn_commit_update_set` — Set state to complete
+  - [ ] `sn_add_to_update_set` — Add record to update set
+
+## Phase 18 — Agile Management Tools (12 tools)
+
+- [x] `src/tools/agile.ts`
+  - [ ] `sn_list_stories` — List rm_story records
+  - [ ] `sn_create_story` — Create user story
+  - [ ] `sn_update_story` — Update story
+  - [ ] `sn_list_epics` — List rm_epic records
+  - [ ] `sn_create_epic` — Create epic
+  - [ ] `sn_update_epic` — Update epic
+  - [ ] `sn_list_scrum_tasks` — List rm_scrum_task records
+  - [ ] `sn_create_scrum_task` — Create scrum task
+  - [ ] `sn_update_scrum_task` — Update scrum task
+  - [ ] `sn_list_projects` — List pm_project records
+  - [ ] `sn_create_project` — Create project
+  - [ ] `sn_update_project` — Update project
+
+## Phase 19 — CMDB Tools (5 tools)
+
+- [x] `src/tools/cmdb.ts`
+  - [ ] `sn_list_ci` — List cmdb_ci (or subclasses like cmdb_ci_server, cmdb_ci_computer)
+  - [ ] `sn_get_ci` — Get CI details
+  - [ ] `sn_create_ci` — Create CI
+  - [ ] `sn_list_ci_relationships` — List cmdb_rel_ci records
+  - [ ] `sn_create_ci_relationship` — Create relationship between CIs
+
+## Phase 20 — Schema Discovery Tools (3 tools)
+
+> Inspired by Happy-Technologies — runtime table introspection
+
+- [x] `src/tools/schema.ts`
+  - [ ] `sn_get_table_schema` — GET `/api/now/table/sys_dictionary?sysparm_query=name={table}` → returns field definitions, types, max_length, reference targets
+  - [ ] `sn_discover_table` — Full discovery: fields + relationships + parent table hierarchy (uses sys_db_object + sys_dictionary)
+  - [ ] `sn_list_tables` — List available tables from sys_db_object
+
+## Phase 21 — Natural Language Search (1 tool)
+
+> Inspired by Happy-Technologies + michaelbuckner — translates plain English to encoded queries
+
+- [x] `src/tools/search.ts`
+  - [ ] `sn_natural_language_search` — Pattern matching to convert NL → encoded query
+    - "high priority incidents assigned to me" → `priority=1^assigned_to=javascript:gs.getUserID()`
+    - "open problems from network team" → `state!=7^assignment_group.name=Network`
+    - "emergency changes created this week" → `type=emergency^sys_created_onONThis week@javascript:gs.beginningOfThisWeek()@javascript:gs.endOfThisWeek()`
+    - Support 15+ common query patterns based on sn-11ty operator docs
+
+## Phase 22 — Batch Operations (2 tools)
+
+> Inspired by Happy-Technologies — parallel bulk operations
+
+- [x] `src/tools/batch.ts`
+  - [ ] `sn_batch_create` — Create multiple records across tables in parallel
+  - [ ] `sn_batch_update` — Update multiple records across tables in parallel
+
+## Phase 23 — MCP Resources (read-only URIs)
+
+> Inspired by michaelbuckner + Happy-Technologies
+
+- [x] `src/resources/index.ts`
+  - [ ] `servicenow://incidents` — Recent incidents (last 20)
+  - [ ] `servicenow://incidents/{number}` — Specific incident by number
+  - [ ] `servicenow://users` — Active user list
+  - [ ] `servicenow://knowledge` — Recent knowledge articles
+  - [ ] `servicenow://tables` — Available table list
+  - [ ] `servicenow://tables/{table}` — Recent records from any table
+  - [ ] `servicenow://schema/{table}` — Table schema/field definitions
+
+## Phase 24 — Tool Packages System
+
+> Inspired by echelon-ai-labs — role-based tool subsets
+
+- [x] `src/packages/definitions.ts` — Package definitions
+  - `full` — all tools (default)
+  - `service_desk` — incidents, comments, work_notes, users, knowledge lookup
+  - `change_coordinator` — changes, tasks, approvals
+  - `catalog_builder` — catalog items, categories, variables
+  - `knowledge_author` — KB bases, categories, articles
+  - `platform_developer` — scripts, workflows, update sets, schema discovery
+  - `system_admin` — users, groups, tables, schema
+  - `agile` — stories, epics, tasks, projects
+- [x] `src/packages/index.ts` — Package loader (reads `SN_TOOL_PACKAGE` env, filters tool registration)
+
+## Phase 25 — Streamable HTTP Transport
+
+- [x] `src/http.ts` — HTTP entry point using Bun.serve()
+  - MCP SDK's `StreamableHTTPServerTransport`
+  - Health check endpoint (`/health`)
+  - MCP endpoint (`/mcp`)
+
+---
+
+## Phase 26 — Tests
+
+- [x] `tests/mocks/servicenow.ts` — Mock SN API responses (incident, user, change, etc.)
+- [x] `tests/auth/basic.test.ts` — Basic auth header generation
+- [x] `tests/auth/oauth.test.ts` — OAuth token fetch, caching, refresh
+- [x] `tests/client/client.test.ts` — Client methods, error handling, pagination
+- [x] `tests/tools/tables.test.ts` — Generic CRUD tools
+- [x] `tests/tools/incidents.test.ts` — Incident tools
+- [x] `tests/tools/users.test.ts` — User/group tools
+- [x] `tests/tools/changes.test.ts` — Change management tools
+- [x] `tests/tools/catalog.test.ts` — Catalog tools
+- [x] `tests/tools/knowledge.test.ts` — Knowledge tools
+- [x] `tests/tools/schema.test.ts` — Schema discovery tools
+- [x] `tests/utils/query.test.ts` — Encoded query builder
+
+## Phase 27 — Documentation & Polish
+
+- [x] `README.md` — Full docs with setup, config, tool list, examples
+- [x] `.env.example` — All env vars with comments
+- [x] Review all tool descriptions for LLM clarity
+- [x] Verify bun build & run
+
+---
+
+## Architecture
+
+```
+servicenow-mcp-server/
+├── src/
+│   ├── index.ts                         # stdio entry point
+│   ├── http.ts                          # Streamable HTTP entry point
+│   ├── server.ts                        # MCP server setup, tool/resource registration
+│   ├── config.ts                        # Env + config validation (zod)
+│   │
+│   ├── auth/
+│   │   ├── index.ts                     # Auth provider factory
+│   │   ├── basic.ts                     # Basic auth (Base64)
+│   │   ├── oauth.ts                     # OAuth 2.0 (client creds, auto-refresh)
+│   │   └── types.ts                     # AuthProvider interface
+│   │
+│   ├── client/
+│   │   ├── index.ts                     # ServiceNow REST client (fetch wrapper)
+│   │   ├── errors.ts                    # SN-specific error handling
+│   │   └── types.ts                     # API response/pagination types
+│   │
+│   ├── tools/
+│   │   ├── tables.ts                    # Generic Table API CRUD (any table)
+│   │   ├── incidents.ts                 # Incident management + convenience
+│   │   ├── changes.ts                   # Change requests + tasks + approvals
+│   │   ├── users.ts                     # Users, groups, members
+│   │   ├── catalog.ts                   # Service catalog items/categories/variables
+│   │   ├── knowledge.ts                 # Knowledge bases, categories, articles
+│   │   ├── workflows.ts                 # Workflows, activities
+│   │   ├── scripts.ts                   # Script includes
+│   │   ├── changesets.ts                # Update sets / changesets
+│   │   ├── agile.ts                     # Stories, epics, scrum tasks, projects
+│   │   ├── cmdb.ts                      # CMDB CIs + relationships
+│   │   ├── schema.ts                    # Schema discovery / table introspection
+│   │   ├── search.ts                    # Natural language search
+│   │   └── batch.ts                     # Batch create/update
+│   │
+│   ├── resources/
+│   │   └── index.ts                     # servicenow:// URI resources
+│   │
+│   ├── packages/
+│   │   ├── index.ts                     # Package loader
+│   │   └── definitions.ts              # Role-based package definitions
+│   │
+│   └── utils/
+│       ├── logger.ts                    # stderr-safe logger
+│       └── query.ts                     # Encoded query builder (all SN operators)
+│
+├── tests/
+│   ├── mocks/servicenow.ts
+│   ├── auth/
+│   ├── client/
+│   ├── tools/
+│   └── utils/
+│
+├── todo.md                              # ← You are here
+├── package.json
+├── tsconfig.json
+├── .env.example
+├── .gitignore
+└── README.md
+```
+
+## Tool Count Summary
+
+| Module | Tools | Table(s) |
+|--------|-------|----------|
+| Generic Table API | 5 | any |
+| Incidents | 7 | incident |
+| Users & Groups | 9 | sys_user, sys_user_group, sys_user_grmember |
+| Change Management | 10 | change_request, change_task, sysapproval_approver |
+| Service Catalog | 12 | sc_catalog, sc_cat_item, sc_category, item_option_new |
+| Knowledge Base | 8 | kb_knowledge_base, kb_category, kb_knowledge |
+| Workflows | 5 | wf_workflow, wf_activity |
+| Script Includes | 5 | sys_script_include |
+| Update Sets | 7 | sys_update_set, sys_update_xml |
+| Agile | 12 | rm_story, rm_epic, rm_scrum_task, pm_project |
+| CMDB | 5 | cmdb_ci, cmdb_rel_ci |
+| Schema Discovery | 3 | sys_dictionary, sys_db_object |
+| NL Search | 1 | any |
+| Batch Operations | 2 | any |
+| **Total** | **91** | |
+
+## MCP Resources: 7
+
+| URI | Description |
+|-----|-------------|
+| `servicenow://incidents` | Recent incidents |
+| `servicenow://incidents/{number}` | Specific incident by number |
+| `servicenow://users` | Active users |
+| `servicenow://knowledge` | Knowledge articles |
+| `servicenow://tables` | Available tables |
+| `servicenow://tables/{table}` | Records from any table |
+| `servicenow://schema/{table}` | Table schema |
+
+## Key Insights from sn-11ty Knowledge Base
+
+### Encoded Query Operators (for query builder)
+`=` `!=` `<` `<=` `>` `>=` `LIKE` `NOT LIKE` `STARTSWITH` `ENDSWITH` `IN` `NOT IN` `ISEMPTY` `ISNOTEMPTY` `BETWEEN` `SAMEAS` `NSAMEAS` `VALCHANGES` `CHANGESFROM` `CHANGESTO` `GT_FIELD` `LT_FIELD` `MORETHAN` `LESSTHAN` `ANYTHING` `RELATIVEGE` `RELATIVELE` `DATEPART` `DYNAMIC`
+
+### Logical Operators
+`^` (AND) `^OR` (OR) `^NQ` (new query) `ORDERBY` `ORDERBYDESC`
+
+### Key ServiceNow API Patterns
+- Table API: `GET/POST/PUT/PATCH/DELETE /api/now/table/{table_name}`
+- Query params: `sysparm_query`, `sysparm_fields`, `sysparm_limit`, `sysparm_offset`, `sysparm_display_value`, `sysparm_exclude_reference_link`, `sysparm_suppress_pagination_header`
+- Response wrapper: `{ "result": [ ... ] }` or `{ "result": { ... } }`
+- Auth: Basic (Base64), OAuth 2.0 (POST `/oauth_token.do`)
+- sys_id: 32-char GUID primary key on every record
+- Display value vs stored value: `sysparm_display_value=true|false|all`
+
+### Important SN Tables (from sn-11ty)
+- **Core ITSM:** incident, problem, change_request, change_task, sc_request, sc_req_item, sysapproval_approver
+- **Service Catalog:** sc_catalog, sc_cat_item, sc_cat_item_guide, sc_category, item_option_new, catalog_ui_policy
+- **Users:** sys_user, sys_user_group, sys_user_grmember, sys_user_role
+- **CMDB:** cmdb_ci, cmdb_ci_server, cmdb_ci_computer, cmdb_rel_ci, alm_asset
+- **Platform Dev:** sys_script, sys_script_include, sys_script_client, sys_ui_policy, sys_ui_action
+- **Update Sets:** sys_update_set, sys_update_xml
+- **Workflows:** wf_workflow, wf_activity, wf_transition, wf_context, wf_executing, wf_history
+- **Flow Designer:** sys_hub_flow, sys_hub_flow_base, sys_hub_flow_logic, sys_hub_flow_variable
+- **Integration:** sys_rest_message, sys_ws_definition, sys_import_set, sys_transform_map
+- **Knowledge:** kb_knowledge_base, kb_category, kb_knowledge
+- **Agile:** rm_story, rm_epic, rm_scrum_task, pm_project
+
+### REST Error Codes to Handle
+- 400 Bad Request (sn_ws_err.BadRequestError)
+- 401 Unauthorized
+- 403 Forbidden
+- 404 Not Found (sn_ws_err.NotFoundError)
+- 406 Not Acceptable (sn_ws_err.NotAcceptableError)
+- 409 Conflict (sn_ws_err.ConflictError)
+- 415 Unsupported Media Type (sn_ws_err.UnsupportedMediaTypeError)
+- 429 Rate Limited
+
+## Dependencies
+
+```json
+{
+  "@modelcontextprotocol/sdk": "latest",
+  "zod": "^3.x"
+}
+```
+
+Zero other deps. Bun provides native fetch, native test runner, native TypeScript.

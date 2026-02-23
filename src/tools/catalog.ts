@@ -1,0 +1,248 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { ServiceNowClient } from "../client/index.ts";
+import { joinQueries } from "../utils/query.ts";
+
+export function registerCatalogTools(server: McpServer, client: ServiceNowClient): void {
+
+  server.registerTool(
+    "sn_list_catalogs",
+    {
+      description: "List service catalogs from ServiceNow.",
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).default(20),
+      },
+    },
+    async ({ limit }) => {
+      const result = await client.queryTable("sc_catalog", {
+        sysparm_fields: "sys_id,title,description,active", sysparm_limit: limit,
+        sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({ count: result.records.length, catalogs: result.records }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_list_catalog_items",
+    {
+      description: "List service catalog items with optional category filter.",
+      inputSchema: {
+        query: z.string().optional(),
+        category: z.string().optional().describe("Category sys_id or name"),
+        active: z.boolean().optional(),
+        limit: z.number().int().min(1).max(100).default(20),
+        offset: z.number().int().min(0).default(0),
+      },
+    },
+    async ({ query, category, active, limit, offset }) => {
+      const parts: string[] = [];
+      if (query) parts.push(query);
+      if (category) parts.push(`category.title=${category}`);
+      if (active !== undefined) parts.push(`active=${active}`);
+      const result = await client.queryTable("sc_cat_item", {
+        sysparm_query: joinQueries(...parts, "ORDERBYname"),
+        sysparm_fields: "sys_id,name,short_description,category,active,price,recurring_price,sys_class_name",
+        sysparm_limit: limit, sysparm_offset: offset, sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({ count: result.records.length, pagination: result.pagination, items: result.records }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_get_catalog_item",
+    {
+      description: "Get a specific catalog item with its variables.",
+      inputSchema: {
+        sys_id: z.string().describe("Catalog item sys_id"),
+      },
+    },
+    async ({ sys_id }) => {
+      const [item, vars] = await Promise.all([
+        client.getRecord("sc_cat_item", sys_id, { sysparm_display_value: "all", sysparm_exclude_reference_link: "true" }),
+        client.queryTable("item_option_new", {
+          sysparm_query: `cat_item=${sys_id}^ORDERBYorder`, sysparm_limit: 100,
+          sysparm_fields: "sys_id,name,question_text,type,mandatory,default_value,order,active",
+          sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+        }),
+      ]);
+      return { content: [{ type: "text" as const, text: JSON.stringify({ item, variables: vars.records }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_update_catalog_item",
+    {
+      description: "Update a service catalog item.",
+      inputSchema: {
+        sys_id: z.string(),
+        data: z.record(z.string(), z.unknown()),
+      },
+    },
+    async ({ sys_id, data }) => {
+      const record = await client.updateRecord("sc_cat_item", sys_id, data);
+      return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, sys_id: record["sys_id"], record }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_list_catalog_categories",
+    {
+      description: "List service catalog categories.",
+      inputSchema: {
+        catalog: z.string().optional().describe("Catalog sys_id"),
+        limit: z.number().int().min(1).max(100).default(50),
+      },
+    },
+    async ({ catalog, limit }) => {
+      const parts: string[] = [];
+      if (catalog) parts.push(`sc_catalog=${catalog}`);
+      const result = await client.queryTable("sc_category", {
+        sysparm_query: joinQueries(...parts, "ORDERBYtitle"),
+        sysparm_fields: "sys_id,title,description,parent,sc_catalog,active",
+        sysparm_limit: limit, sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({ count: result.records.length, categories: result.records }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_create_catalog_category",
+    {
+      description: "Create a new service catalog category.",
+      inputSchema: {
+        title: z.string(),
+        description: z.string().optional(),
+        sc_catalog: z.string().optional().describe("Catalog sys_id"),
+        parent: z.string().optional().describe("Parent category sys_id"),
+      },
+    },
+    async (params) => {
+      const data: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(params)) { if (v !== undefined) data[k] = v; }
+      const record = await client.createRecord("sc_category", data);
+      return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, sys_id: record["sys_id"], record }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_update_catalog_category",
+    {
+      description: "Update a service catalog category.",
+      inputSchema: {
+        sys_id: z.string(),
+        data: z.record(z.string(), z.unknown()),
+      },
+    },
+    async ({ sys_id, data }) => {
+      const record = await client.updateRecord("sc_category", sys_id, data);
+      return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, record }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_move_catalog_items",
+    {
+      description: "Move catalog items to a different category.",
+      inputSchema: {
+        item_sys_ids: z.array(z.string()).describe("Array of catalog item sys_ids to move"),
+        target_category_sys_id: z.string().describe("Target category sys_id"),
+      },
+    },
+    async ({ item_sys_ids, target_category_sys_id }) => {
+      const moved = [];
+      for (const id of item_sys_ids) {
+        await client.updateRecord("sc_cat_item", id, { category: target_category_sys_id });
+        moved.push(id);
+      }
+      return { content: [{ type: "text" as const, text: JSON.stringify({ moved: moved.length, items: moved, target_category: target_category_sys_id }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_create_catalog_variable",
+    {
+      description: "Create a new variable (form field) for a catalog item. Uses the item_option_new table.",
+      inputSchema: {
+        cat_item: z.string().describe("Catalog item sys_id"),
+        name: z.string().describe("Variable name (internal)"),
+        question_text: z.string().describe("Label shown to user"),
+        type: z.string().default("6").describe("Variable type: 1=Yes/No, 2=Multi Line Text, 3=Multiple Choice, 5=Select Box, 6=Single Line Text, 7=Checkbox, 8=Reference, 9=Date, 10=Date/Time, 18=Lookup Select, 21=List Collector"),
+        mandatory: z.boolean().default(false),
+        default_value: z.string().optional(),
+        order: z.number().int().optional().describe("Display order"),
+      },
+    },
+    async (params) => {
+      const data: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(params)) { if (v !== undefined) data[k] = v; }
+      const record = await client.createRecord("item_option_new", data);
+      return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, sys_id: record["sys_id"], record }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_list_catalog_variables",
+    {
+      description: "List variables for a catalog item.",
+      inputSchema: {
+        cat_item: z.string().describe("Catalog item sys_id"),
+      },
+    },
+    async ({ cat_item }) => {
+      const result = await client.queryTable("item_option_new", {
+        sysparm_query: `cat_item=${cat_item}^ORDERBYorder`,
+        sysparm_fields: "sys_id,name,question_text,type,mandatory,default_value,order,active",
+        sysparm_limit: 100, sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({ count: result.records.length, variables: result.records }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_update_catalog_variable",
+    {
+      description: "Update a catalog item variable.",
+      inputSchema: {
+        sys_id: z.string().describe("Variable sys_id"),
+        data: z.record(z.string(), z.unknown()),
+      },
+    },
+    async ({ sys_id, data }) => {
+      const record = await client.updateRecord("item_option_new", sys_id, data);
+      return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, record }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_get_catalog_recommendations",
+    {
+      description: "Get basic optimization recommendations for catalog items (items missing descriptions, inactive items, etc.).",
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).default(50),
+      },
+    },
+    async ({ limit }) => {
+      const [noDesc, inactive] = await Promise.all([
+        client.queryTable("sc_cat_item", {
+          sysparm_query: "active=true^short_descriptionISEMPTY", sysparm_limit: limit,
+          sysparm_fields: "sys_id,name,category", sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+        }),
+        client.queryTable("sc_cat_item", {
+          sysparm_query: "active=false", sysparm_limit: limit,
+          sysparm_fields: "sys_id,name,category,sys_updated_on", sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+        }),
+      ]);
+      return {
+        content: [{
+          type: "text" as const,
+          text: JSON.stringify({
+            recommendations: [
+              { issue: "Missing short_description", count: noDesc.records.length, items: noDesc.records },
+              { issue: "Inactive items (consider retiring)", count: inactive.records.length, items: inactive.records },
+            ],
+          }, null, 2),
+        }],
+      };
+    }
+  );
+}

@@ -1,0 +1,90 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { ServiceNowClient } from "../client/index.ts";
+
+export function registerSchemaTools(server: McpServer, client: ServiceNowClient): void {
+
+  server.registerTool(
+    "sn_get_table_schema",
+    {
+      description: "Get the schema (field definitions) for a ServiceNow table. Returns field names, types, labels, max lengths, mandatory flags, and reference targets.",
+      inputSchema: {
+        table: z.string().describe("Table name (e.g. 'incident', 'sys_user')"),
+      },
+    },
+    async ({ table }) => {
+      const result = await client.queryTable("sys_dictionary", {
+        sysparm_query: `name=${table}^elementISNOTEMPTY^ORDERBYelement`,
+        sysparm_fields: "element,column_label,internal_type,max_length,mandatory,reference,default_value,active,read_only",
+        sysparm_limit: 500,
+        sysparm_display_value: "true",
+        sysparm_exclude_reference_link: "true",
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({ table, field_count: result.records.length, fields: result.records }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_discover_table",
+    {
+      description: "Full discovery of a table: fields, parent hierarchy, and relationships.",
+      inputSchema: {
+        table: z.string().describe("Table name"),
+        include_relationships: z.boolean().default(false).describe("Also fetch foreign key relationships"),
+      },
+    },
+    async ({ table, include_relationships }) => {
+      // Get table metadata from sys_db_object
+      const [tableInfo, fields] = await Promise.all([
+        client.queryTable("sys_db_object", {
+          sysparm_query: `name=${table}`, sysparm_limit: 1,
+          sysparm_fields: "sys_id,name,label,super_class,sys_class_name,access",
+          sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+        }),
+        client.queryTable("sys_dictionary", {
+          sysparm_query: `name=${table}^elementISNOTEMPTY^ORDERBYelement`,
+          sysparm_fields: "element,column_label,internal_type,max_length,mandatory,reference,default_value,active",
+          sysparm_limit: 500, sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
+        }),
+      ]);
+
+      const response: Record<string, unknown> = {
+        table: tableInfo.records[0] ?? { name: table },
+        field_count: fields.records.length,
+        fields: fields.records,
+      };
+
+      if (include_relationships) {
+        const refs = fields.records.filter((f) => f["reference"] && f["reference"] !== "");
+        response["reference_fields"] = refs.map((f) => ({
+          field: f["element"],
+          references_table: f["reference"],
+        }));
+      }
+
+      return { content: [{ type: "text" as const, text: JSON.stringify(response, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "sn_list_tables",
+    {
+      description: "List available tables in ServiceNow (from sys_db_object).",
+      inputSchema: {
+        query: z.string().optional().describe("Filter by name (LIKE match)"),
+        limit: z.number().int().min(1).max(500).default(100),
+      },
+    },
+    async ({ query, limit }) => {
+      const q = query ? `nameLIKE${query}^ORDERBYname` : "ORDERBYname";
+      const result = await client.queryTable("sys_db_object", {
+        sysparm_query: q,
+        sysparm_fields: "sys_id,name,label,super_class",
+        sysparm_limit: limit,
+        sysparm_display_value: "true",
+        sysparm_exclude_reference_link: "true",
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({ count: result.records.length, tables: result.records }, null, 2) }] };
+    }
+  );
+}

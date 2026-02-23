@@ -1,0 +1,22 @@
+{
+  "name": "servicenow-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for ServiceNow — 91 tools across incidents, changes, catalog, CMDB, users, knowledge, workflows, and more",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "start:http": "bun run src/http.ts",
+    "dev": "bun run --watch src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^4.3.6"
+  }
+}
