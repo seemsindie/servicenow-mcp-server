@@ -12,11 +12,12 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
     "cmdb", "schema", "search", "batch",
     "background_scripts", "platform_scripts", "scripted_rest",
     "widgets", "ui_pages", "flows", "app_scope", "script_sync",
+    "problems",
   ],
 
   /** Service desk agents — incidents, users, knowledge */
   service_desk: [
-    "tables", "incidents", "users", "knowledge", "search",
+    "tables", "incidents", "users", "knowledge", "search", "problems",
   ],
 
   /** Change coordinators — change lifecycle */

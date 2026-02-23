@@ -27,6 +27,7 @@ import { registerUiPageTools } from "./tools/ui-pages.ts";
 import { registerFlowTools } from "./tools/flows.ts";
 import { registerAppScopeTools } from "./tools/app-scope.ts";
 import { registerScriptSyncTools } from "./tools/script-sync.ts";
+import { registerProblemTools } from "./tools/problems.ts";
 
 // Resources
 import { registerResources } from "./resources/index.ts";
@@ -60,6 +61,7 @@ const TOOL_MODULES: { key: string; register: (server: McpServer, registry: Insta
   { key: "flows", register: registerFlowTools },
   { key: "app_scope", register: registerAppScopeTools },
   { key: "script_sync", register: registerScriptSyncTools },
+  { key: "problems", register: registerProblemTools },
 ];
 
 /**

@@ -638,9 +638,11 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 
 ## Phase K — Problem Management (7 tools)
 
-- [ ] `src/tools/problems.ts` — Same pattern as incidents
+- [x] `src/tools/problems.ts` — Same pattern as incidents
   - list, get, create, update, add_comment, add_work_notes, close
-- [ ] Tables: `problem`, `problem_task`
+- [x] Tables: `problem`, `problem_task`
+- [x] Registered in `server.ts` and `definitions.ts` (full, service_desk)
+- [x] Tests: 11 tests in `tests/tools/problems.test.ts`
 
 ## Phase L — Service Request / RITM (6 tools)
 
@@ -786,7 +788,7 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 | R: Static Table Metadata | +0 (infra) | 153 | **Done** |
 | S: Enhanced Schema | +1 | **154** (217 tests) | **Done** |
 | T: Progress Reporting | +0 (infra) | **154** (236 tests) | **Done** |
-| K: Problem Mgmt | +7 | 161 | Pending |
+| K: Problem Mgmt | +7 | **161** (247 tests) | **Done** |
 | L: Requests/RITM | +6 | 167 | Pending |
 | M: Catalog Validation | +1 | 168 | Pending |
 | N: Extras | +6 | **174** | Pending |
