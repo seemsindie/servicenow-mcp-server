@@ -646,8 +646,10 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 
 ## Phase L — Service Request / RITM (6 tools)
 
-- [ ] `src/tools/requests.ts`
+- [x] `src/tools/requests.ts`
   - list_requests, get_request, list_request_items, get_request_item, update_request_item, submit_catalog_request
+- [x] Registered in `server.ts` and `definitions.ts` (full, service_desk)
+- [x] Tests: 9 tests in `tests/tools/requests.test.ts`
 
 ## Phase M — Catalog Validation (1 tool)
 
@@ -789,6 +791,6 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 | S: Enhanced Schema | +1 | **154** (217 tests) | **Done** |
 | T: Progress Reporting | +0 (infra) | **154** (236 tests) | **Done** |
 | K: Problem Mgmt | +7 | **161** (247 tests) | **Done** |
-| L: Requests/RITM | +6 | 167 | Pending |
+| L: Requests/RITM | +6 | **167** (256 tests) | **Done** |
 | M: Catalog Validation | +1 | 168 | Pending |
 | N: Extras | +6 | **174** | Pending |

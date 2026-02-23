@@ -13,11 +13,12 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
     "background_scripts", "platform_scripts", "scripted_rest",
     "widgets", "ui_pages", "flows", "app_scope", "script_sync",
     "problems",
+    "requests",
   ],
 
   /** Service desk agents — incidents, users, knowledge */
   service_desk: [
-    "tables", "incidents", "users", "knowledge", "search", "problems",
+    "tables", "incidents", "users", "knowledge", "search", "problems", "requests",
   ],
 
   /** Change coordinators — change lifecycle */
