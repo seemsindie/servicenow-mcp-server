@@ -19,7 +19,6 @@
         "username": "admin",
         "password": "your-password"
       },
-      "default": false,
       "description": "Test / QA instance"
     },
     {
@@ -32,8 +31,13 @@
         "username": "integration_user",
         "password": "your-password"
       },
-      "default": false,
       "description": "Production instance"
     }
-  ]
+  ],
+  "toolPackage": "full",
+  "debug": false,
+  "http": {
+    "port": 3000,
+    "host": "127.0.0.1"
+  }
 }

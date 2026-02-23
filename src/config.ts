@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { logger } from "./utils/logger.ts";
 
-// ── Auth schemas (shared between single-instance and multi-instance) ──
+// ── Auth schemas ─────────────────────────────────────────────────────
 
 const AuthBasicSchema = z.object({
   type: z.literal("basic"),
@@ -37,16 +37,26 @@ const InstanceSchema = z.object({
   description: z.string().optional(),
 });
 
-const InstancesFileSchema = z
+// ── Full config file schema ──────────────────────────────────────────
+
+const ConfigFileSchema = z
   .object({
     instances: z.array(InstanceSchema).min(1, "At least one instance is required"),
+    toolPackage: z.string().default("full"),
+    debug: z.boolean().default(false),
+    http: z
+      .object({
+        port: z.number().int().positive().default(3000),
+        host: z.string().default("127.0.0.1"),
+      })
+      .default({ port: 3000, host: "127.0.0.1" }),
   })
   .refine(
     (data) => data.instances.filter((i) => i.default).length <= 1,
     "At most one instance can be marked as default"
   );
 
-// ── Top-level config schema ──────────────────────────────────────────
+// ── Top-level config type (output of Zod parse) ─────────────────────
 
 export const ConfigSchema = z.object({
   instances: z.array(InstanceSchema).min(1),
@@ -67,120 +77,70 @@ export type AuthOAuthConfig = z.infer<typeof AuthOAuthSchema>;
 export type AuthConfig = z.infer<typeof AuthSchema>;
 
 /**
- * Default paths to search for the instances config file.
- * Resolved relative to the current working directory.
+ * Default paths to search for the config file (resolved relative to cwd).
  */
 const CONFIG_FILE_PATHS = [
-  "config/servicenow-instances.json",
-  "servicenow-instances.json",
+  "config/servicenow-config.json",
+  "servicenow-config.json",
 ];
 
 /**
- * Try to load instances from a JSON config file.
- * Returns null if no config file is found.
+ * Load and validate config from a JSON file.
+ *
+ * @param configPath  Explicit path to the config file (from --config CLI arg).
+ *                    If omitted, auto-discovers from CONFIG_FILE_PATHS.
+ * @returns Validated Config object
+ * @throws  Error if no config file is found or if validation fails
  */
-function loadInstancesFromFile(): InstanceConfig[] | null {
+export function loadConfig(configPath?: string): Config {
+  if (configPath) {
+    return loadFromFile(resolve(process.cwd(), configPath), configPath);
+  }
+
+  // Auto-discover
   for (const relPath of CONFIG_FILE_PATHS) {
     const absPath = resolve(process.cwd(), relPath);
     try {
-      const raw = readFileSync(absPath, "utf-8");
-      const parsed = JSON.parse(raw);
-      const result = InstancesFileSchema.safeParse(parsed);
-      if (!result.success) {
-        const issues = result.error.issues
-          .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-          .join("\n");
-        throw new Error(`Invalid instances config file (${relPath}):\n${issues}`);
-      }
-      logger.info(`Loaded ${result.data.instances.length} instance(s) from ${relPath}`);
-      return result.data.instances;
+      const config = loadFromFile(absPath, relPath);
+      logger.info(`Loaded config from ${relPath}`);
+      return config;
     } catch (err: unknown) {
       if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
         continue; // file not found, try next path
       }
-      throw err; // re-throw parse errors or permission errors
+      throw err; // re-throw parse/validation errors
     }
   }
-  return null;
+
+  throw new Error(
+    `No config file found. Searched:\n` +
+    CONFIG_FILE_PATHS.map((p) => `  - ${p}`).join("\n") +
+    `\n\nCreate config/servicenow-config.json or use --config <path>.\n` +
+    `See config/servicenow-config.example.json for the template.`
+  );
 }
 
 /**
- * Build a single-instance config from environment variables (backward compat).
+ * Read, parse, and validate a single config file.
  */
-function loadInstanceFromEnv(): InstanceConfig {
-  const authType = (process.env["SERVICENOW_AUTH_TYPE"] ?? "basic").toLowerCase();
+function loadFromFile(absPath: string, displayPath: string): Config {
+  const raw = readFileSync(absPath, "utf-8");
 
-  let auth: unknown;
-  if (authType === "oauth") {
-    auth = {
-      type: "oauth" as const,
-      clientId: process.env["SERVICENOW_CLIENT_ID"] ?? "",
-      clientSecret: process.env["SERVICENOW_CLIENT_SECRET"] ?? "",
-      username: process.env["SERVICENOW_USERNAME"] || undefined,
-      password: process.env["SERVICENOW_PASSWORD"] || undefined,
-    };
-  } else {
-    auth = {
-      type: "basic" as const,
-      username: process.env["SERVICENOW_USERNAME"] ?? "",
-      password: process.env["SERVICENOW_PASSWORD"] ?? "",
-    };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Invalid JSON in config file: ${displayPath}`);
   }
 
-  const raw = {
-    name: "default",
-    url: process.env["SERVICENOW_INSTANCE_URL"] ?? "",
-    auth,
-    default: true,
-    description: "Loaded from environment variables",
-  };
-
-  const result = InstanceSchema.safeParse(raw);
+  const result = ConfigFileSchema.safeParse(parsed);
   if (!result.success) {
     const issues = result.error.issues
       .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
       .join("\n");
-    throw new Error(
-      `Invalid ServiceNow configuration from environment variables:\n${issues}\n\n` +
-        "Hint: Create config/servicenow-instances.json for multi-instance setup."
-    );
+    throw new Error(`Invalid config file (${displayPath}):\n${issues}`);
   }
 
-  return result.data;
-}
-
-/**
- * Load config: tries JSON config file first, falls back to env vars.
- * Throws a descriptive error if configuration is invalid.
- */
-export function loadConfig(): Config {
-  // Try config file first, fall back to env vars
-  const instances = loadInstancesFromFile();
-  if (instances) {
-    logger.info("Using JSON config file for instance configuration");
-  } else {
-    logger.info("No config file found, falling back to environment variables");
-  }
-
-  const instanceList = instances ?? [loadInstanceFromEnv()];
-
-  const raw = {
-    instances: instanceList,
-    toolPackage: process.env["SN_TOOL_PACKAGE"] ?? "full",
-    debug: process.env["SN_DEBUG"] === "true",
-    http: {
-      port: Number(process.env["SN_HTTP_PORT"] ?? 3000),
-      host: process.env["SN_HTTP_HOST"] ?? "127.0.0.1",
-    },
-  };
-
-  const result = ConfigSchema.safeParse(raw);
-  if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-      .join("\n");
-    throw new Error(`Invalid ServiceNow MCP server configuration:\n${issues}`);
-  }
-
+  logger.info(`Loaded ${result.data.instances.length} instance(s) from ${displayPath}`);
   return result.data;
 }

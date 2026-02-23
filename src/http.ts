@@ -4,6 +4,7 @@
  *
  * Usage:
  *   bun run src/http.ts
+ *   bun run src/http.ts --config /path/to/config.json
  *
  * Starts an HTTP server with:
  *   GET  /health  — health check
@@ -15,8 +16,19 @@ import { loadConfig } from "./config.ts";
 import { createServer } from "./server.ts";
 import { logger } from "./utils/logger.ts";
 
+function parseConfigPath(): string | undefined {
+  const idx = process.argv.indexOf("--config");
+  if (idx === -1) return undefined;
+  const path = process.argv[idx + 1];
+  if (!path || path.startsWith("--")) {
+    logger.error("--config requires a file path argument");
+    process.exit(1);
+  }
+  return path;
+}
+
 async function main() {
-  const config = loadConfig();
+  const config = loadConfig(parseConfigPath());
   const server = createServer(config);
 
   const { host, port } = config.http;

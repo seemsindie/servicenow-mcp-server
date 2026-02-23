@@ -22,16 +22,16 @@
 - [x] `package.json` with deps: `@modelcontextprotocol/sdk`, `zod`
 - [x] `tsconfig.json` (strict, ES2022, NodeNext)
 - [x] `.gitignore`
-- [x] `.env.example`
-- [x] Directory structure: `src/`, `src/auth/`, `src/client/`, `src/tools/`, `src/resources/`, `src/packages/`, `src/utils/`, `tests/`
+- [x] `config/servicenow-config.example.json`
+- [x] Directory structure: `src/`, `src/auth/`, `src/client/`, `src/tools/`, `src/resources/`, `src/packages/`, `src/utils/`, `tests/`, `config/`
 
 ## Phase 2 — Config Module
 
-- [x] `src/config.ts` — Zod-validated env config
-  - Instance URL, auth type, credentials
-  - Optional: multi-instance config file support
-  - Tool package selection via `SN_TOOL_PACKAGE` env var
-  - Debug mode flag
+- [x] `src/config.ts` — Zod-validated JSON config
+  - Single JSON config file (`config/servicenow-config.json`)
+  - Multi-instance support with per-instance auth
+  - `--config <path>` CLI argument
+  - Tool package selection, debug mode, HTTP settings — all in JSON
 
 ## Phase 3 — Logger
 
@@ -304,7 +304,7 @@
 ## Phase 27 — Documentation & Polish
 
 - [x] `README.md` — Full docs with setup, config, tool list, examples
-- [x] `.env.example` — All env vars with comments
+- [x] `config/servicenow-config.example.json` — Config template
 - [x] Review all tool descriptions for LLM clarity
 - [x] Verify bun build & run
 
@@ -322,7 +322,8 @@
 - [x] **Instance tools** — `src/tools/instances.ts`: `sn_list_instances`, `sn_instance_info` (always available regardless of package)
 - [x] **Resources** — `resources/index.ts` updated to use `InstanceRegistry` (default instance for all resources)
 - [x] **Tests** — Updated all test files: `createMockRegistry()` helper, registry tests, instance tool tests, updated config/server/auth/tool tests for new shapes
-- [x] **Docs** — Updated README.md, .env.example, todo.md with multi-instance documentation
+- [x] **Docs** — Updated README.md, todo.md with multi-instance documentation
+- [x] **Config simplification** — Removed all env var configuration (.env, SERVICENOW_*, SN_*). Single JSON config file is the only config source. Added `--config <path>` CLI argument. Deleted `.env.example`. Renamed config file to `servicenow-config.json`. Server-level settings (toolPackage, debug, http) moved into the JSON config file. Config auto-discovers `config/servicenow-config.json` or `servicenow-config.json`.
 
 ---
 
@@ -389,7 +390,6 @@ servicenow-mcp-server/
 ├── todo.md                              # ← You are here
 ├── package.json
 ├── tsconfig.json
-├── .env.example
 ├── .gitignore
 └── README.md
 ```

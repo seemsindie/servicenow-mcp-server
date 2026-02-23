@@ -1,76 +1,108 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { loadConfig } from "../src/config.ts";
+import { writeFileSync, mkdirSync, rmSync } from "fs";
+import { join } from "path";
+
+/**
+ * Tests for loadConfig() — JSON-file-only configuration.
+ *
+ * Strategy: write temp JSON files, call loadConfig(path), verify output or errors.
+ */
+const TMP_DIR = join(import.meta.dir, ".tmp-config-test");
+
+function writeTempConfig(filename: string, content: unknown): string {
+  const filePath = join(TMP_DIR, filename);
+  writeFileSync(filePath, JSON.stringify(content, null, 2), "utf-8");
+  return filePath;
+}
+
+function minimalConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    instances: [
+      {
+        name: "dev",
+        url: "https://dev.service-now.com",
+        auth: { type: "basic", username: "admin", password: "pass" },
+        default: true,
+      },
+    ],
+    ...overrides,
+  };
+}
 
 describe("loadConfig", () => {
-  const originalEnv = { ...process.env };
-
-  function setBasicEnv() {
-    process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
-    process.env["SERVICENOW_AUTH_TYPE"] = "basic";
-    process.env["SERVICENOW_USERNAME"] = "admin";
-    process.env["SERVICENOW_PASSWORD"] = "password123";
-  }
-
   beforeEach(() => {
-    // Clear all SN-related env vars
-    delete process.env["SERVICENOW_INSTANCE_URL"];
-    delete process.env["SERVICENOW_AUTH_TYPE"];
-    delete process.env["SERVICENOW_USERNAME"];
-    delete process.env["SERVICENOW_PASSWORD"];
-    delete process.env["SERVICENOW_CLIENT_ID"];
-    delete process.env["SERVICENOW_CLIENT_SECRET"];
-    delete process.env["SN_TOOL_PACKAGE"];
-    delete process.env["SN_DEBUG"];
-    delete process.env["SN_HTTP_PORT"];
-    delete process.env["SN_HTTP_HOST"];
+    mkdirSync(TMP_DIR, { recursive: true });
   });
 
   afterEach(() => {
-    // Restore original env
-    for (const key of Object.keys(process.env)) {
-      if (key.startsWith("SERVICENOW_") || key.startsWith("SN_")) {
-        delete process.env[key];
-      }
-    }
-    Object.assign(process.env, originalEnv);
+    rmSync(TMP_DIR, { recursive: true, force: true });
   });
 
-  test("loads valid basic auth config from env", () => {
-    setBasicEnv();
-    const config = loadConfig();
+  // ── Valid configs ──────────────────────────────────────
 
-    // Config now uses instances[] instead of top-level instanceUrl/auth
+  test("loads a valid single-instance config", () => {
+    const path = writeTempConfig("basic.json", minimalConfig());
+    const config = loadConfig(path);
+
     expect(config.instances).toHaveLength(1);
-    expect(config.instances[0]!.url).toBe("https://test.service-now.com");
-    expect(config.instances[0]!.name).toBe("default");
+    expect(config.instances[0]!.name).toBe("dev");
+    expect(config.instances[0]!.url).toBe("https://dev.service-now.com");
     expect(config.instances[0]!.auth.type).toBe("basic");
-    if (config.instances[0]!.auth.type === "basic") {
-      expect(config.instances[0]!.auth.username).toBe("admin");
-      expect(config.instances[0]!.auth.password).toBe("password123");
-    }
-    expect(config.toolPackage).toBe("full");
-    expect(config.debug).toBe(false);
-    expect(config.http.port).toBe(3000);
-    expect(config.http.host).toBe("127.0.0.1");
+    expect(config.instances[0]!.default).toBe(true);
   });
 
-  test("strips trailing slashes from instance URL", () => {
-    setBasicEnv();
-    process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com///";
-    const config = loadConfig();
-    expect(config.instances[0]!.url).toBe("https://test.service-now.com");
+  test("loads a valid multi-instance config", () => {
+    const path = writeTempConfig("multi.json", {
+      instances: [
+        {
+          name: "dev",
+          url: "https://dev.service-now.com",
+          auth: { type: "basic", username: "admin", password: "pass" },
+          default: true,
+          description: "Dev environment",
+        },
+        {
+          name: "prod",
+          url: "https://prod.service-now.com",
+          auth: {
+            type: "oauth",
+            clientId: "c1",
+            clientSecret: "s1",
+            username: "admin",
+            password: "pass",
+          },
+        },
+      ],
+    });
+    const config = loadConfig(path);
+
+    expect(config.instances).toHaveLength(2);
+    expect(config.instances[0]!.name).toBe("dev");
+    expect(config.instances[0]!.description).toBe("Dev environment");
+    expect(config.instances[1]!.name).toBe("prod");
+    expect(config.instances[1]!.auth.type).toBe("oauth");
   });
 
-  test("loads oauth config from env", () => {
-    process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
-    process.env["SERVICENOW_AUTH_TYPE"] = "oauth";
-    process.env["SERVICENOW_CLIENT_ID"] = "client123";
-    process.env["SERVICENOW_CLIENT_SECRET"] = "secret456";
-    process.env["SERVICENOW_USERNAME"] = "admin";
-    process.env["SERVICENOW_PASSWORD"] = "pass";
-
-    const config = loadConfig();
+  test("loads oauth config with all fields", () => {
+    const path = writeTempConfig("oauth.json", {
+      instances: [
+        {
+          name: "prod",
+          url: "https://prod.service-now.com",
+          auth: {
+            type: "oauth",
+            clientId: "client123",
+            clientSecret: "secret456",
+            username: "admin",
+            password: "pass",
+          },
+        },
+      ],
+    });
+    const config = loadConfig(path);
     const auth = config.instances[0]!.auth;
+
     expect(auth.type).toBe("oauth");
     if (auth.type === "oauth") {
       expect(auth.clientId).toBe("client123");
@@ -80,68 +112,188 @@ describe("loadConfig", () => {
     }
   });
 
-  test("defaults to basic auth when SERVICENOW_AUTH_TYPE is not set", () => {
-    process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
-    process.env["SERVICENOW_USERNAME"] = "admin";
-    process.env["SERVICENOW_PASSWORD"] = "pass";
+  // ── Defaults ───────────────────────────────────────────
 
-    const config = loadConfig();
-    expect(config.instances[0]!.auth.type).toBe("basic");
+  test("applies default toolPackage='full'", () => {
+    const path = writeTempConfig("defaults.json", minimalConfig());
+    const config = loadConfig(path);
+    expect(config.toolPackage).toBe("full");
   });
 
-  test("env-loaded instance is marked as default", () => {
-    setBasicEnv();
-    const config = loadConfig();
-    expect(config.instances[0]!.default).toBe(true);
+  test("applies default debug=false", () => {
+    const path = writeTempConfig("defaults.json", minimalConfig());
+    const config = loadConfig(path);
+    expect(config.debug).toBe(false);
   });
 
-  test("respects SN_DEBUG=true", () => {
-    setBasicEnv();
-    process.env["SN_DEBUG"] = "true";
-    const config = loadConfig();
+  test("applies default http settings", () => {
+    const path = writeTempConfig("defaults.json", minimalConfig());
+    const config = loadConfig(path);
+    expect(config.http.port).toBe(3000);
+    expect(config.http.host).toBe("127.0.0.1");
+  });
+
+  test("respects custom toolPackage", () => {
+    const path = writeTempConfig("pkg.json", minimalConfig({ toolPackage: "service_desk" }));
+    const config = loadConfig(path);
+    expect(config.toolPackage).toBe("service_desk");
+  });
+
+  test("respects custom debug=true", () => {
+    const path = writeTempConfig("debug.json", minimalConfig({ debug: true }));
+    const config = loadConfig(path);
     expect(config.debug).toBe(true);
   });
 
-  test("respects custom HTTP port and host", () => {
-    setBasicEnv();
-    process.env["SN_HTTP_PORT"] = "8080";
-    process.env["SN_HTTP_HOST"] = "0.0.0.0";
-    const config = loadConfig();
+  test("respects custom http settings", () => {
+    const path = writeTempConfig("http.json", minimalConfig({
+      http: { port: 8080, host: "0.0.0.0" },
+    }));
+    const config = loadConfig(path);
     expect(config.http.port).toBe(8080);
     expect(config.http.host).toBe("0.0.0.0");
   });
 
-  test("respects custom tool package", () => {
-    setBasicEnv();
-    process.env["SN_TOOL_PACKAGE"] = "service_desk";
-    const config = loadConfig();
-    expect(config.toolPackage).toBe("service_desk");
+  test("strips trailing slashes from instance URL", () => {
+    const path = writeTempConfig("slash.json", {
+      instances: [
+        {
+          name: "dev",
+          url: "https://dev.service-now.com///",
+          auth: { type: "basic", username: "admin", password: "pass" },
+        },
+      ],
+    });
+    const config = loadConfig(path);
+    expect(config.instances[0]!.url).toBe("https://dev.service-now.com");
+  });
+
+  test("instance default defaults to false", () => {
+    const path = writeTempConfig("nodefault.json", {
+      instances: [
+        {
+          name: "dev",
+          url: "https://dev.service-now.com",
+          auth: { type: "basic", username: "admin", password: "pass" },
+          // no "default" field
+        },
+      ],
+    });
+    const config = loadConfig(path);
+    expect(config.instances[0]!.default).toBe(false);
+  });
+
+  // ── Error cases ────────────────────────────────────────
+
+  test("throws when file not found (explicit path)", () => {
+    expect(() => loadConfig(join(TMP_DIR, "nonexistent.json"))).toThrow();
+  });
+
+  test("throws on invalid JSON", () => {
+    const filePath = join(TMP_DIR, "bad.json");
+    writeFileSync(filePath, "not json {{{", "utf-8");
+    expect(() => loadConfig(filePath)).toThrow("Invalid JSON");
+  });
+
+  test("throws on empty instances array", () => {
+    const path = writeTempConfig("empty.json", { instances: [] });
+    expect(() => loadConfig(path)).toThrow("At least one instance");
   });
 
   test("throws on missing instance URL", () => {
-    process.env["SERVICENOW_USERNAME"] = "admin";
-    process.env["SERVICENOW_PASSWORD"] = "pass";
-    // No SERVICENOW_INSTANCE_URL
-    expect(() => loadConfig()).toThrow();
+    const path = writeTempConfig("nourl.json", {
+      instances: [
+        { name: "dev", auth: { type: "basic", username: "admin", password: "pass" } },
+      ],
+    });
+    expect(() => loadConfig(path)).toThrow("Invalid config file");
+  });
+
+  test("throws on invalid instance URL", () => {
+    const path = writeTempConfig("badurl.json", {
+      instances: [
+        {
+          name: "dev",
+          url: "not-a-url",
+          auth: { type: "basic", username: "admin", password: "pass" },
+        },
+      ],
+    });
+    expect(() => loadConfig(path)).toThrow("Invalid config file");
   });
 
   test("throws on missing basic auth credentials", () => {
-    process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
-    // No username/password
-    expect(() => loadConfig()).toThrow();
+    const path = writeTempConfig("noauth.json", {
+      instances: [
+        {
+          name: "dev",
+          url: "https://dev.service-now.com",
+          auth: { type: "basic" },
+        },
+      ],
+    });
+    expect(() => loadConfig(path)).toThrow("Invalid config file");
   });
 
   test("throws on missing oauth client credentials", () => {
-    process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
-    process.env["SERVICENOW_AUTH_TYPE"] = "oauth";
-    // No client ID/secret
-    expect(() => loadConfig()).toThrow();
+    const path = writeTempConfig("nooauth.json", {
+      instances: [
+        {
+          name: "dev",
+          url: "https://dev.service-now.com",
+          auth: { type: "oauth" },
+        },
+      ],
+    });
+    expect(() => loadConfig(path)).toThrow("Invalid config file");
   });
 
-  test("throws on invalid URL", () => {
-    process.env["SERVICENOW_INSTANCE_URL"] = "not-a-url";
-    process.env["SERVICENOW_USERNAME"] = "admin";
-    process.env["SERVICENOW_PASSWORD"] = "pass";
-    expect(() => loadConfig()).toThrow();
+  test("throws on multiple defaults", () => {
+    const path = writeTempConfig("multidefault.json", {
+      instances: [
+        {
+          name: "dev",
+          url: "https://dev.service-now.com",
+          auth: { type: "basic", username: "a", password: "b" },
+          default: true,
+        },
+        {
+          name: "prod",
+          url: "https://prod.service-now.com",
+          auth: { type: "basic", username: "a", password: "b" },
+          default: true,
+        },
+      ],
+    });
+    expect(() => loadConfig(path)).toThrow("At most one instance");
+  });
+
+  test("throws on missing instance name", () => {
+    const path = writeTempConfig("noname.json", {
+      instances: [
+        {
+          url: "https://dev.service-now.com",
+          auth: { type: "basic", username: "admin", password: "pass" },
+        },
+      ],
+    });
+    expect(() => loadConfig(path)).toThrow("Invalid config file");
+  });
+
+  // ── Auto-discovery (no explicit path) ──────────────────
+
+  test("throws with helpful message when no config file found", () => {
+    // loadConfig() with no arg will search cwd-relative paths — they won't exist
+    // from the test runner's perspective, unless config/servicenow-config.json exists
+    // We test this by calling loadConfig() from a known-empty dir
+    const emptyDir = join(TMP_DIR, "empty-dir");
+    mkdirSync(emptyDir, { recursive: true });
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(emptyDir);
+      expect(() => loadConfig()).toThrow("No config file found");
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });
