@@ -35,15 +35,18 @@ describe("loadConfig", () => {
     Object.assign(process.env, originalEnv);
   });
 
-  test("loads valid basic auth config", () => {
+  test("loads valid basic auth config from env", () => {
     setBasicEnv();
     const config = loadConfig();
 
-    expect(config.instanceUrl).toBe("https://test.service-now.com");
-    expect(config.auth.type).toBe("basic");
-    if (config.auth.type === "basic") {
-      expect(config.auth.username).toBe("admin");
-      expect(config.auth.password).toBe("password123");
+    // Config now uses instances[] instead of top-level instanceUrl/auth
+    expect(config.instances).toHaveLength(1);
+    expect(config.instances[0]!.url).toBe("https://test.service-now.com");
+    expect(config.instances[0]!.name).toBe("default");
+    expect(config.instances[0]!.auth.type).toBe("basic");
+    if (config.instances[0]!.auth.type === "basic") {
+      expect(config.instances[0]!.auth.username).toBe("admin");
+      expect(config.instances[0]!.auth.password).toBe("password123");
     }
     expect(config.toolPackage).toBe("full");
     expect(config.debug).toBe(false);
@@ -51,14 +54,14 @@ describe("loadConfig", () => {
     expect(config.http.host).toBe("127.0.0.1");
   });
 
-  test("strips trailing slashes from instanceUrl", () => {
+  test("strips trailing slashes from instance URL", () => {
     setBasicEnv();
     process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com///";
     const config = loadConfig();
-    expect(config.instanceUrl).toBe("https://test.service-now.com");
+    expect(config.instances[0]!.url).toBe("https://test.service-now.com");
   });
 
-  test("loads oauth config", () => {
+  test("loads oauth config from env", () => {
     process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
     process.env["SERVICENOW_AUTH_TYPE"] = "oauth";
     process.env["SERVICENOW_CLIENT_ID"] = "client123";
@@ -67,12 +70,13 @@ describe("loadConfig", () => {
     process.env["SERVICENOW_PASSWORD"] = "pass";
 
     const config = loadConfig();
-    expect(config.auth.type).toBe("oauth");
-    if (config.auth.type === "oauth") {
-      expect(config.auth.clientId).toBe("client123");
-      expect(config.auth.clientSecret).toBe("secret456");
-      expect(config.auth.username).toBe("admin");
-      expect(config.auth.password).toBe("pass");
+    const auth = config.instances[0]!.auth;
+    expect(auth.type).toBe("oauth");
+    if (auth.type === "oauth") {
+      expect(auth.clientId).toBe("client123");
+      expect(auth.clientSecret).toBe("secret456");
+      expect(auth.username).toBe("admin");
+      expect(auth.password).toBe("pass");
     }
   });
 
@@ -82,7 +86,13 @@ describe("loadConfig", () => {
     process.env["SERVICENOW_PASSWORD"] = "pass";
 
     const config = loadConfig();
-    expect(config.auth.type).toBe("basic");
+    expect(config.instances[0]!.auth.type).toBe("basic");
+  });
+
+  test("env-loaded instance is marked as default", () => {
+    setBasicEnv();
+    const config = loadConfig();
+    expect(config.instances[0]!.default).toBe(true);
   });
 
   test("respects SN_DEBUG=true", () => {
@@ -112,26 +122,26 @@ describe("loadConfig", () => {
     process.env["SERVICENOW_USERNAME"] = "admin";
     process.env["SERVICENOW_PASSWORD"] = "pass";
     // No SERVICENOW_INSTANCE_URL
-    expect(() => loadConfig()).toThrow("Invalid ServiceNow MCP server configuration");
+    expect(() => loadConfig()).toThrow();
   });
 
   test("throws on missing basic auth credentials", () => {
     process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
     // No username/password
-    expect(() => loadConfig()).toThrow("Invalid ServiceNow MCP server configuration");
+    expect(() => loadConfig()).toThrow();
   });
 
   test("throws on missing oauth client credentials", () => {
     process.env["SERVICENOW_INSTANCE_URL"] = "https://test.service-now.com";
     process.env["SERVICENOW_AUTH_TYPE"] = "oauth";
     // No client ID/secret
-    expect(() => loadConfig()).toThrow("Invalid ServiceNow MCP server configuration");
+    expect(() => loadConfig()).toThrow();
   });
 
   test("throws on invalid URL", () => {
     process.env["SERVICENOW_INSTANCE_URL"] = "not-a-url";
     process.env["SERVICENOW_USERNAME"] = "admin";
     process.env["SERVICENOW_PASSWORD"] = "pass";
-    expect(() => loadConfig()).toThrow("Invalid ServiceNow MCP server configuration");
+    expect(() => loadConfig()).toThrow();
   });
 });

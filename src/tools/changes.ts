@@ -1,15 +1,16 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ServiceNowClient } from "../client/index.ts";
+import type { InstanceRegistry } from "../client/registry.ts";
 import { joinQueries } from "../utils/query.ts";
 
-export function registerChangeTools(server: McpServer, client: ServiceNowClient): void {
+export function registerChangeTools(server: McpServer, registry: InstanceRegistry): void {
 
   server.registerTool(
     "sn_list_change_requests",
     {
       description: "List change requests from ServiceNow with optional filters.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         query: z.string().optional().describe("Encoded query"),
         type: z.enum(["normal", "standard", "emergency"]).optional().describe("Change type"),
         state: z.string().optional().describe("State value"),
@@ -19,7 +20,8 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
         offset: z.number().int().min(0).default(0),
       },
     },
-    async ({ query, type, state, risk, assignment_group, limit, offset }) => {
+    async ({ instance, query, type, state, risk, assignment_group, limit, offset }) => {
+      const client = registry.resolve(instance);
       const parts: string[] = [];
       if (query) parts.push(query);
       if (type) parts.push(`type=${type}`);
@@ -42,11 +44,13 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Get detailed information about a specific change request.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().optional().describe("Change request sys_id"),
         number: z.string().optional().describe("Change request number (e.g. CHG0000001)"),
       },
     },
-    async ({ sys_id, number }) => {
+    async ({ instance, sys_id, number }) => {
+      const client = registry.resolve(instance);
       if (sys_id) {
         const record = await client.getRecord("change_request", sys_id, { sysparm_display_value: "all", sysparm_exclude_reference_link: "true" });
         return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
@@ -64,6 +68,7 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Create a new change request in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         short_description: z.string().describe("Brief description"),
         description: z.string().optional(),
         type: z.enum(["normal", "standard", "emergency"]).default("normal"),
@@ -80,9 +85,10 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
       },
     },
     async (params) => {
+      const client = registry.resolve(params.instance);
       const data: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(params)) {
-        if (v !== undefined) data[k] = v;
+        if (v !== undefined && k !== "instance") data[k] = v;
       }
       const record = await client.createRecord("change_request", data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, number: record["number"], sys_id: record["sys_id"], record }, null, 2) }] };
@@ -94,11 +100,13 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Update an existing change request.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Change request sys_id"),
         data: z.record(z.string(), z.unknown()).describe("Fields to update"),
       },
     },
-    async ({ sys_id, data }) => {
+    async ({ instance, sys_id, data }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("change_request", sys_id, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, number: record["number"], record }, null, 2) }] };
     }
@@ -109,6 +117,7 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Add a task to a change request.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         change_request_sys_id: z.string().describe("Parent change request sys_id"),
         short_description: z.string().describe("Task description"),
         assignment_group: z.string().optional(),
@@ -117,7 +126,8 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
         planned_end_date: z.string().optional(),
       },
     },
-    async ({ change_request_sys_id, short_description, assignment_group, assigned_to, planned_start_date, planned_end_date }) => {
+    async ({ instance, change_request_sys_id, short_description, assignment_group, assigned_to, planned_start_date, planned_end_date }) => {
+      const client = registry.resolve(instance);
       const data: Record<string, unknown> = { change_request: change_request_sys_id, short_description };
       if (assignment_group) data["assignment_group"] = assignment_group;
       if (assigned_to) data["assigned_to"] = assigned_to;
@@ -134,10 +144,12 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Submit a change request for approval by advancing its state.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Change request sys_id"),
       },
     },
-    async ({ sys_id }) => {
+    async ({ instance, sys_id }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("change_request", sys_id, { state: "-4" }); // -4 = Authorize
       return { content: [{ type: "text" as const, text: JSON.stringify({ submitted: true, number: record["number"], state: record["state"] }, null, 2) }] };
     }
@@ -148,12 +160,13 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Approve a change request (update the approval record).",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Change request sys_id"),
         comments: z.string().optional().describe("Approval comments"),
       },
     },
-    async ({ sys_id, comments }) => {
-      // Find the approval record
+    async ({ instance, sys_id, comments }) => {
+      const client = registry.resolve(instance);
       const approvals = await client.queryTable("sysapproval_approver", {
         sysparm_query: `sysapproval=${sys_id}^state=requested`,
         sysparm_limit: 1, sysparm_fields: "sys_id",
@@ -174,11 +187,13 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Reject a change request.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Change request sys_id"),
         comments: z.string().optional().describe("Rejection reason"),
       },
     },
-    async ({ sys_id, comments }) => {
+    async ({ instance, sys_id, comments }) => {
+      const client = registry.resolve(instance);
       const approvals = await client.queryTable("sysapproval_approver", {
         sysparm_query: `sysapproval=${sys_id}^state=requested`,
         sysparm_limit: 1, sysparm_fields: "sys_id",
@@ -199,11 +214,13 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Add a customer-visible comment to a change request.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string(),
         comment: z.string(),
       },
     },
-    async ({ sys_id, comment }) => {
+    async ({ instance, sys_id, comment }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("change_request", sys_id, { comments: comment });
       return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, number: record["number"] }, null, 2) }] };
     }
@@ -214,11 +231,13 @@ export function registerChangeTools(server: McpServer, client: ServiceNowClient)
     {
       description: "Add internal work notes to a change request.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string(),
         work_notes: z.string(),
       },
     },
-    async ({ sys_id, work_notes }) => {
+    async ({ instance, sys_id, work_notes }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("change_request", sys_id, { work_notes });
       return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, number: record["number"] }, null, 2) }] };
     }

@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerSearchTools } from "../../src/tools/search.ts";
-import { createMockClient, type MockClient } from "../mocks/index.ts";
+import { createMockRegistry, type MockRegistry } from "../mocks/index.ts";
 
 /**
  * Tests for natural language search tool.
@@ -13,11 +13,11 @@ import { createMockClient, type MockClient } from "../mocks/index.ts";
  */
 describe("registerSearchTools", () => {
   let server: McpServer;
-  let mockClient: MockClient;
+  let mockRegistry: MockRegistry;
 
   beforeEach(() => {
     server = new McpServer({ name: "test", version: "0.0.1" });
-    mockClient = createMockClient({
+    mockRegistry = createMockRegistry({
       queryTableResult: {
         records: [{ sys_id: "1", short_description: "Test result" }],
         pagination: { limit: 20, offset: 0, hasMore: false },
@@ -26,24 +26,25 @@ describe("registerSearchTools", () => {
   });
 
   test("registers 1 tool without error", () => {
-    registerSearchTools(server as unknown as McpServer, mockClient as unknown as Parameters<typeof registerSearchTools>[1]);
+    registerSearchTools(server, mockRegistry as unknown as Parameters<typeof registerSearchTools>[1]);
     expect(true).toBe(true);
   });
 
   test("search tool queries with translated NL query", async () => {
-    registerSearchTools(server as unknown as McpServer, mockClient as unknown as Parameters<typeof registerSearchTools>[1]);
+    registerSearchTools(server, mockRegistry as unknown as Parameters<typeof registerSearchTools>[1]);
 
+    const client = mockRegistry._client;
     // Simulate what the NL search would do for "high priority active incidents"
     // The translateNL function would produce: priority=2^active=true
-    await mockClient.queryTable("incident", {
+    await client.queryTable("incident", {
       sysparm_query: "priority=2^active=true^ORDERBYDESCsys_created_on",
       sysparm_limit: 20,
       sysparm_display_value: "true",
       sysparm_exclude_reference_link: "true",
     });
 
-    expect(mockClient._calls.queryTable).toHaveLength(1);
-    expect(mockClient._calls.queryTable[0]!.tableName).toBe("incident");
+    expect(client._calls.queryTable).toHaveLength(1);
+    expect(client._calls.queryTable[0]!.tableName).toBe("incident");
   });
 });
 

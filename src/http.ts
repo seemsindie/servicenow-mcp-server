@@ -34,7 +34,7 @@ async function main() {
       // Health check
       if (url.pathname === "/health") {
         return new Response(
-          JSON.stringify({ status: "ok", server: "servicenow-mcp-server", version: "0.1.0" }),
+          JSON.stringify({ status: "ok", server: "servicenow-mcp-server", version: "0.2.0" }),
           { headers: { "Content-Type": "application/json" } }
         );
       }

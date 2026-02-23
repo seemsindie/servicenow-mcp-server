@@ -1,15 +1,16 @@
 # ServiceNow MCP Server
 
-A comprehensive [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for ServiceNow, built with **Bun** and **TypeScript**. Exposes 91 tools across 14 ServiceNow domains, 7 read-only resources, and role-based tool packages.
+A comprehensive [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for ServiceNow, built with **Bun** and **TypeScript**. Exposes 93 tools across 15 ServiceNow domains, 7 read-only resources, and role-based tool packages. Supports **multi-instance** configurations with per-call instance targeting.
 
 ## Features
 
-- **91 MCP tools** covering incidents, changes, catalog, CMDB, users, knowledge, workflows, scripts, update sets, agile, schema discovery, natural language search, and batch operations
+- **93 MCP tools** covering incidents, changes, catalog, CMDB, users, knowledge, workflows, scripts, update sets, agile, schema discovery, natural language search, batch operations, and instance management
+- **Multi-instance support** — configure multiple ServiceNow instances (dev/test/prod) with per-instance auth; target any instance per tool call via the `instance` parameter
 - **7 MCP resources** — read-only `servicenow://` URIs for incidents, users, knowledge, tables, schema
 - **8 tool packages** — role-based subsets (service desk, change coordinator, platform developer, etc.)
 - **Two transports** — stdio (for Claude Desktop / Claude Code) and Streamable HTTP (for web integrations)
-- **Basic & OAuth 2.0 auth** with automatic token refresh
-- **Zod-validated config** with clear error messages for missing env vars
+- **Basic & OAuth 2.0 auth** with automatic token refresh, configured per instance
+- **Zod-validated config** with clear error messages
 
 ## Quick Start
 
@@ -24,10 +25,20 @@ A comprehensive [Model Context Protocol](https://modelcontextprotocol.io) (MCP) 
 git clone <this-repo>
 cd servicenow-mcp-server
 bun install
+```
 
-# Configure credentials
+**Option A: Single instance via environment variables** (simplest)
+
+```bash
 cp .env.example .env
 # Edit .env with your ServiceNow instance URL and credentials
+```
+
+**Option B: Multi-instance via JSON config** (recommended for multiple instances)
+
+```bash
+cp config/servicenow-instances.example.json config/servicenow-instances.json
+# Edit with your instance details
 ```
 
 ### Run (stdio transport)
@@ -47,7 +58,60 @@ bun run start:http
 
 ## Configuration
 
-All configuration is via environment variables (or a `.env` file):
+### Multi-Instance Configuration (JSON file)
+
+Create `config/servicenow-instances.json` (or `servicenow-instances.json` in the project root):
+
+```json
+{
+  "instances": [
+    {
+      "name": "dev",
+      "url": "https://dev-instance.service-now.com",
+      "auth": {
+        "type": "basic",
+        "username": "admin",
+        "password": "dev-password"
+      },
+      "default": true,
+      "description": "Development instance"
+    },
+    {
+      "name": "test",
+      "url": "https://test-instance.service-now.com",
+      "auth": {
+        "type": "oauth",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret",
+        "username": "admin",
+        "password": "test-password"
+      },
+      "description": "Test/QA instance"
+    },
+    {
+      "name": "prod",
+      "url": "https://prod-instance.service-now.com",
+      "auth": {
+        "type": "basic",
+        "username": "readonly-user",
+        "password": "prod-password"
+      },
+      "description": "Production instance (read-only user)"
+    }
+  ]
+}
+```
+
+Each instance specifies:
+- `name` — unique identifier used in the `instance` parameter on tool calls
+- `url` — ServiceNow instance URL
+- `auth` — authentication config (`basic` or `oauth`), independent per instance
+- `default` — (optional) mark one instance as default; first instance is used if none marked
+- `description` — (optional) human-readable description
+
+### Single-Instance Configuration (Environment Variables)
+
+If no JSON config file is found, the server falls back to environment variables for backward compatibility:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
@@ -57,17 +121,46 @@ All configuration is via environment variables (or a `.env` file):
 | `SERVICENOW_PASSWORD` | Yes* | — | Password |
 | `SERVICENOW_CLIENT_ID` | Yes** | — | OAuth client ID |
 | `SERVICENOW_CLIENT_SECRET` | Yes** | — | OAuth client secret |
-| `SN_TOOL_PACKAGE` | No | `full` | Tool package (see below) |
-| `SN_DEBUG` | No | `false` | Enable debug logging |
-| `SN_HTTP_PORT` | No | `3000` | HTTP transport port |
-| `SN_HTTP_HOST` | No | `127.0.0.1` | HTTP transport host |
 
-\* Required for basic auth  
+\* Required for basic auth
 \*\* Required for OAuth
+
+### General Settings (Environment Variables)
+
+These apply regardless of which config method you use:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SN_TOOL_PACKAGE` | `full` | Tool package (see below) |
+| `SN_DEBUG` | `false` | Enable debug logging |
+| `SN_HTTP_PORT` | `3000` | HTTP transport port |
+| `SN_HTTP_HOST` | `127.0.0.1` | HTTP transport host |
+
+## Using Multiple Instances
+
+Every tool accepts an optional `instance` parameter. When omitted, the default instance is used.
+
+```
+# Query incidents on the default instance
+sn_query_table(table: "incident", query: "active=true")
+
+# Query incidents on a specific instance
+sn_query_table(table: "incident", query: "active=true", instance: "prod")
+
+# List all configured instances
+sn_list_instances()
+
+# Get info about a specific instance
+sn_instance_info(instance: "dev")
+```
+
+MCP resources (`servicenow://` URIs) always use the default instance.
 
 ## Claude Desktop Integration
 
 Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+**Single instance (env vars):**
 
 ```json
 {
@@ -86,13 +179,31 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
+**Multi-instance (JSON config file):**
+
+```json
+{
+  "mcpServers": {
+    "servicenow": {
+      "command": "bun",
+      "args": ["run", "/path/to/servicenow-mcp-server/src/index.ts"],
+      "env": {
+        "SN_TOOL_PACKAGE": "full"
+      }
+    }
+  }
+}
+```
+
+Place your `config/servicenow-instances.json` in the project directory.
+
 ## Tool Packages
 
 Limit exposed tools by role. Set `SN_TOOL_PACKAGE` to one of:
 
 | Package | Modules | Use Case |
 |---|---|---|
-| `full` | All 14 modules (91 tools) | Full access |
+| `full` | All 14 modules (91 tools) + instance tools | Full access |
 | `service_desk` | tables, incidents, users, knowledge, search | Service desk agents |
 | `change_coordinator` | tables, changes, users, search | Change management |
 | `catalog_builder` | tables, catalog, search | Catalog administration |
@@ -101,7 +212,12 @@ Limit exposed tools by role. Set `SN_TOOL_PACKAGE` to one of:
 | `system_admin` | tables, users, schema, search, batch | System administration |
 | `agile` | tables, agile, users, search | Agile teams |
 
+Note: Instance management tools (`sn_list_instances`, `sn_instance_info`) are always available regardless of package selection.
+
 ## Tools Reference
+
+### Instance Management (2 tools) — always available
+`sn_list_instances`, `sn_instance_info`
 
 ### Generic Table API (5 tools)
 `sn_query_table`, `sn_get_record`, `sn_create_record`, `sn_update_record`, `sn_delete_record`
@@ -147,6 +263,8 @@ Limit exposed tools by role. Set `SN_TOOL_PACKAGE` to one of:
 
 ## MCP Resources
 
+Resources always use the default instance.
+
 | URI | Description |
 |---|---|
 | `servicenow://incidents` | 20 most recent incidents |
@@ -177,13 +295,20 @@ src/
   index.ts          # stdio entry point
   http.ts           # Streamable HTTP entry point
   server.ts         # MCP server setup, modular tool registration
-  config.ts         # Zod-validated env config
-  auth/             # Basic & OAuth providers
-  client/           # ServiceNow REST client, error mapping
-  tools/            # 14 tool modules (one per domain)
-  resources/        # 7 servicenow:// MCP resources
+  config.ts         # Zod-validated config (JSON file + env var fallback)
+  auth/             # Basic & OAuth providers (per-instance)
+  client/
+    index.ts        # ServiceNow REST client
+    registry.ts     # InstanceRegistry — maps instance names to clients
+    errors.ts       # SN-specific error classes
+    types.ts        # API response types
+  tools/            # 14 domain tool modules + instance management
+  resources/        # 7 servicenow:// MCP resources (default instance)
   packages/         # 8 role-based tool package definitions
   utils/            # Logger (stderr-safe), encoded query builder
+
+config/
+  servicenow-instances.example.json  # Multi-instance config template
 ```
 
 ## Dependencies

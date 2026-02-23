@@ -1,19 +1,21 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ServiceNowClient } from "../client/index.ts";
+import type { InstanceRegistry } from "../client/registry.ts";
 import { joinQueries } from "../utils/query.ts";
 
-export function registerCatalogTools(server: McpServer, client: ServiceNowClient): void {
+export function registerCatalogTools(server: McpServer, registry: InstanceRegistry): void {
 
   server.registerTool(
     "sn_list_catalogs",
     {
       description: "List service catalogs from ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         limit: z.number().int().min(1).max(100).default(20),
       },
     },
-    async ({ limit }) => {
+    async ({ instance, limit }) => {
+      const client = registry.resolve(instance);
       const result = await client.queryTable("sc_catalog", {
         sysparm_fields: "sys_id,title,description,active", sysparm_limit: limit,
         sysparm_display_value: "true", sysparm_exclude_reference_link: "true",
@@ -27,6 +29,7 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "List service catalog items with optional category filter.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         query: z.string().optional(),
         category: z.string().optional().describe("Category sys_id or name"),
         active: z.boolean().optional(),
@@ -34,7 +37,8 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
         offset: z.number().int().min(0).default(0),
       },
     },
-    async ({ query, category, active, limit, offset }) => {
+    async ({ instance, query, category, active, limit, offset }) => {
+      const client = registry.resolve(instance);
       const parts: string[] = [];
       if (query) parts.push(query);
       if (category) parts.push(`category.title=${category}`);
@@ -53,10 +57,12 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Get a specific catalog item with its variables.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Catalog item sys_id"),
       },
     },
-    async ({ sys_id }) => {
+    async ({ instance, sys_id }) => {
+      const client = registry.resolve(instance);
       const [item, vars] = await Promise.all([
         client.getRecord("sc_cat_item", sys_id, { sysparm_display_value: "all", sysparm_exclude_reference_link: "true" }),
         client.queryTable("item_option_new", {
@@ -74,11 +80,13 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Update a service catalog item.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string(),
         data: z.record(z.string(), z.unknown()),
       },
     },
-    async ({ sys_id, data }) => {
+    async ({ instance, sys_id, data }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("sc_cat_item", sys_id, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, sys_id: record["sys_id"], record }, null, 2) }] };
     }
@@ -89,11 +97,13 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "List service catalog categories.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         catalog: z.string().optional().describe("Catalog sys_id"),
         limit: z.number().int().min(1).max(100).default(50),
       },
     },
-    async ({ catalog, limit }) => {
+    async ({ instance, catalog, limit }) => {
+      const client = registry.resolve(instance);
       const parts: string[] = [];
       if (catalog) parts.push(`sc_catalog=${catalog}`);
       const result = await client.queryTable("sc_category", {
@@ -110,6 +120,7 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Create a new service catalog category.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         title: z.string(),
         description: z.string().optional(),
         sc_catalog: z.string().optional().describe("Catalog sys_id"),
@@ -117,8 +128,9 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
       },
     },
     async (params) => {
+      const client = registry.resolve(params.instance);
       const data: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(params)) { if (v !== undefined) data[k] = v; }
+      for (const [k, v] of Object.entries(params)) { if (v !== undefined && k !== "instance") data[k] = v; }
       const record = await client.createRecord("sc_category", data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, sys_id: record["sys_id"], record }, null, 2) }] };
     }
@@ -129,11 +141,13 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Update a service catalog category.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string(),
         data: z.record(z.string(), z.unknown()),
       },
     },
-    async ({ sys_id, data }) => {
+    async ({ instance, sys_id, data }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("sc_category", sys_id, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, record }, null, 2) }] };
     }
@@ -144,11 +158,13 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Move catalog items to a different category.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         item_sys_ids: z.array(z.string()).describe("Array of catalog item sys_ids to move"),
         target_category_sys_id: z.string().describe("Target category sys_id"),
       },
     },
-    async ({ item_sys_ids, target_category_sys_id }) => {
+    async ({ instance, item_sys_ids, target_category_sys_id }) => {
+      const client = registry.resolve(instance);
       const moved = [];
       for (const id of item_sys_ids) {
         await client.updateRecord("sc_cat_item", id, { category: target_category_sys_id });
@@ -163,6 +179,7 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Create a new variable (form field) for a catalog item. Uses the item_option_new table.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         cat_item: z.string().describe("Catalog item sys_id"),
         name: z.string().describe("Variable name (internal)"),
         question_text: z.string().describe("Label shown to user"),
@@ -173,8 +190,9 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
       },
     },
     async (params) => {
+      const client = registry.resolve(params.instance);
       const data: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(params)) { if (v !== undefined) data[k] = v; }
+      for (const [k, v] of Object.entries(params)) { if (v !== undefined && k !== "instance") data[k] = v; }
       const record = await client.createRecord("item_option_new", data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, sys_id: record["sys_id"], record }, null, 2) }] };
     }
@@ -185,10 +203,12 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "List variables for a catalog item.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         cat_item: z.string().describe("Catalog item sys_id"),
       },
     },
-    async ({ cat_item }) => {
+    async ({ instance, cat_item }) => {
+      const client = registry.resolve(instance);
       const result = await client.queryTable("item_option_new", {
         sysparm_query: `cat_item=${cat_item}^ORDERBYorder`,
         sysparm_fields: "sys_id,name,question_text,type,mandatory,default_value,order,active",
@@ -203,11 +223,13 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Update a catalog item variable.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Variable sys_id"),
         data: z.record(z.string(), z.unknown()),
       },
     },
-    async ({ sys_id, data }) => {
+    async ({ instance, sys_id, data }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("item_option_new", sys_id, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, record }, null, 2) }] };
     }
@@ -218,10 +240,12 @@ export function registerCatalogTools(server: McpServer, client: ServiceNowClient
     {
       description: "Get basic optimization recommendations for catalog items (items missing descriptions, inactive items, etc.).",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         limit: z.number().int().min(1).max(100).default(50),
       },
     },
-    async ({ limit }) => {
+    async ({ instance, limit }) => {
+      const client = registry.resolve(instance);
       const [noDesc, inactive] = await Promise.all([
         client.queryTable("sc_cat_item", {
           sysparm_query: "active=true^short_descriptionISEMPTY", sysparm_limit: limit,

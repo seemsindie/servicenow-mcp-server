@@ -4,6 +4,7 @@
 
 import type { AuthProvider } from "../../src/auth/types.ts";
 import type { SNPaginatedResult, SNRecord } from "../../src/client/types.ts";
+import type { InstanceRegistry, InstanceInfo } from "../../src/client/registry.ts";
 
 // ── Mock AuthProvider ─────────────────────────────────────
 
@@ -132,3 +133,45 @@ export const SAMPLE_CHANGE: SNRecord = {
   state: "-5",
   risk: "3",
 };
+
+// ── Mock InstanceRegistry ─────────────────────────────────
+
+export interface MockRegistry {
+  resolve: (instanceName?: string) => MockClient;
+  getDefaultName: () => string;
+  listInstances: () => InstanceInfo[];
+  getInstanceInfo: (instanceName?: string) => InstanceInfo;
+  size: number;
+  /** The underlying mock client returned by resolve() */
+  _client: MockClient;
+}
+
+/**
+ * Creates a mock InstanceRegistry that wraps a single mock client.
+ * All `resolve()` calls return the same mock client, making it easy
+ * to inspect calls in tests.
+ */
+export function createMockRegistry(
+  clientOverrides: Parameters<typeof createMockClient>[0] = {},
+  options: { defaultName?: string; instances?: InstanceInfo[] } = {}
+): MockRegistry {
+  const mockClient = createMockClient(clientOverrides);
+  const defaultName = options.defaultName ?? "default";
+  const instances: InstanceInfo[] = options.instances ?? [
+    { name: defaultName, url: "https://test.service-now.com", isDefault: true },
+  ];
+
+  return {
+    resolve: (_instanceName?: string) => mockClient,
+    getDefaultName: () => defaultName,
+    listInstances: () => instances,
+    getInstanceInfo: (instanceName?: string) => {
+      const name = instanceName ?? defaultName;
+      const found = instances.find((i) => i.name === name);
+      if (!found) throw new Error(`Unknown instance: "${name}"`);
+      return found;
+    },
+    size: instances.length,
+    _client: mockClient,
+  };
+}

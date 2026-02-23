@@ -310,6 +310,22 @@
 
 ---
 
+## Phase 28 — Multi-Instance Support
+
+> Inspired by Happy-Technologies-LLC/mcp-servicenow-nodejs, but using stateless per-call instance parameter instead of mutable state switching.
+
+- [x] **Config** — Extended `config.ts` with `InstanceSchema`, `InstancesFileSchema`, JSON config file loading (`config/servicenow-instances.json`), env var fallback for single-instance backward compat
+- [x] **Auth refactor** — Changed `createAuthProvider(instanceUrl, auth)` for per-instance auth (basic or OAuth independently per instance)
+- [x] **InstanceRegistry** — `src/client/registry.ts`: `resolve(instanceName?)`, `listInstances()`, `getInstanceInfo()`, `getDefaultName()`, immutable after construction
+- [x] **Server wiring** — `server.ts` builds `InstanceRegistry` from `config.instances`, passes to all tool modules and resources. Version bumped to 0.2.0
+- [x] **Tool refactor** — All 14 tool modules updated: `instance` Zod param in every tool's inputSchema, `registry.resolve(instance)` per-call
+- [x] **Instance tools** — `src/tools/instances.ts`: `sn_list_instances`, `sn_instance_info` (always available regardless of package)
+- [x] **Resources** — `resources/index.ts` updated to use `InstanceRegistry` (default instance for all resources)
+- [x] **Tests** — Updated all test files: `createMockRegistry()` helper, registry tests, instance tool tests, updated config/server/auth/tool tests for new shapes
+- [x] **Docs** — Updated README.md, .env.example, todo.md with multi-instance documentation
+
+---
+
 ## Architecture
 
 ```
@@ -318,20 +334,22 @@ servicenow-mcp-server/
 │   ├── index.ts                         # stdio entry point
 │   ├── http.ts                          # Streamable HTTP entry point
 │   ├── server.ts                        # MCP server setup, tool/resource registration
-│   ├── config.ts                        # Env + config validation (zod)
+│   ├── config.ts                        # Multi-instance config (JSON file + env var fallback)
 │   │
 │   ├── auth/
-│   │   ├── index.ts                     # Auth provider factory
+│   │   ├── index.ts                     # Auth provider factory (per-instance)
 │   │   ├── basic.ts                     # Basic auth (Base64)
 │   │   ├── oauth.ts                     # OAuth 2.0 (client creds, auto-refresh)
 │   │   └── types.ts                     # AuthProvider interface
 │   │
 │   ├── client/
 │   │   ├── index.ts                     # ServiceNow REST client (fetch wrapper)
+│   │   ├── registry.ts                  # InstanceRegistry — maps names → clients
 │   │   ├── errors.ts                    # SN-specific error handling
 │   │   └── types.ts                     # API response/pagination types
 │   │
 │   ├── tools/
+│   │   ├── instances.ts                 # Instance management (list/info, always available)
 │   │   ├── tables.ts                    # Generic Table API CRUD (any table)
 │   │   ├── incidents.ts                 # Incident management + convenience
 │   │   ├── changes.ts                   # Change requests + tasks + approvals
@@ -348,7 +366,7 @@ servicenow-mcp-server/
 │   │   └── batch.ts                     # Batch create/update
 │   │
 │   ├── resources/
-│   │   └── index.ts                     # servicenow:// URI resources
+│   │   └── index.ts                     # servicenow:// URI resources (default instance)
 │   │
 │   ├── packages/
 │   │   ├── index.ts                     # Package loader
@@ -358,8 +376,11 @@ servicenow-mcp-server/
 │       ├── logger.ts                    # stderr-safe logger
 │       └── query.ts                     # Encoded query builder (all SN operators)
 │
+├── config/
+│   └── servicenow-instances.example.json  # Multi-instance config template
+│
 ├── tests/
-│   ├── mocks/servicenow.ts
+│   ├── mocks/index.ts                   # Mock client + mock registry
 │   ├── auth/
 │   ├── client/
 │   ├── tools/
@@ -377,6 +398,7 @@ servicenow-mcp-server/
 
 | Module | Tools | Table(s) |
 |--------|-------|----------|
+| Instance Management | 2 | — (always available) |
 | Generic Table API | 5 | any |
 | Incidents | 7 | incident |
 | Users & Groups | 9 | sys_user, sys_user_group, sys_user_grmember |
@@ -391,7 +413,7 @@ servicenow-mcp-server/
 | Schema Discovery | 3 | sys_dictionary, sys_db_object |
 | NL Search | 1 | any |
 | Batch Operations | 2 | any |
-| **Total** | **91** | |
+| **Total** | **93** | |
 
 ## MCP Resources: 7
 

@@ -16,8 +16,14 @@ describe("createServer", () => {
 
   function makeConfig(overrides: Partial<Config> = {}): Config {
     return {
-      instanceUrl: "https://test.service-now.com",
-      auth: { type: "basic", username: "admin", password: "pass" },
+      instances: [
+        {
+          name: "default",
+          url: "https://test.service-now.com",
+          auth: { type: "basic", username: "admin", password: "pass" },
+          default: true,
+        },
+      ],
       toolPackage: "full",
       debug: false,
       http: { port: 3000, host: "127.0.0.1" },
@@ -72,7 +78,34 @@ describe("createServer", () => {
 
   test("works with oauth auth config", () => {
     const server = createServer(makeConfig({
-      auth: { type: "oauth", clientId: "c1", clientSecret: "s1", username: "admin", password: "pass" },
+      instances: [
+        {
+          name: "default",
+          url: "https://test.service-now.com",
+          auth: { type: "oauth", clientId: "c1", clientSecret: "s1", username: "admin", password: "pass" },
+          default: true,
+        },
+      ],
+    }));
+    expect(server).toBeDefined();
+  });
+
+  test("works with multiple instances", () => {
+    const server = createServer(makeConfig({
+      instances: [
+        {
+          name: "dev",
+          url: "https://dev.service-now.com",
+          auth: { type: "basic", username: "admin", password: "pass" },
+          default: true,
+        },
+        {
+          name: "prod",
+          url: "https://prod.service-now.com",
+          auth: { type: "basic", username: "admin", password: "prodpass" },
+          default: false,
+        },
+      ],
     }));
     expect(server).toBeDefined();
   });
@@ -87,10 +120,9 @@ describe("createServer", () => {
     createServer(makeConfig());
     // Logger writes to stderr via console.error
     expect(errorSpy).toHaveBeenCalled();
-    // Check that instance URL was logged
+    // Check that instance name was logged
     const allCalls = errorSpy.mock.calls.map((c: unknown[]) => c.join(" ")).join("\n");
-    expect(allCalls).toContain("test.service-now.com");
-    expect(allCalls).toContain("basic");
+    expect(allCalls).toContain("default");
     expect(allCalls).toContain("full");
   });
 });

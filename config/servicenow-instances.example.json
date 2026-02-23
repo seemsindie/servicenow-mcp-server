@@ -1,0 +1,39 @@
+{
+  "instances": [
+    {
+      "name": "dev",
+      "url": "https://dev12345.service-now.com",
+      "auth": {
+        "type": "basic",
+        "username": "admin",
+        "password": "your-password"
+      },
+      "default": true,
+      "description": "Development instance"
+    },
+    {
+      "name": "test",
+      "url": "https://test67890.service-now.com",
+      "auth": {
+        "type": "basic",
+        "username": "admin",
+        "password": "your-password"
+      },
+      "default": false,
+      "description": "Test / QA instance"
+    },
+    {
+      "name": "prod",
+      "url": "https://prod11111.service-now.com",
+      "auth": {
+        "type": "oauth",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret",
+        "username": "integration_user",
+        "password": "your-password"
+      },
+      "default": false,
+      "description": "Production instance"
+    }
+  ]
+}

@@ -1,15 +1,16 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ServiceNowClient } from "../client/index.ts";
+import type { InstanceRegistry } from "../client/registry.ts";
 import { joinQueries } from "../utils/query.ts";
 
-export function registerIncidentTools(server: McpServer, client: ServiceNowClient): void {
+export function registerIncidentTools(server: McpServer, registry: InstanceRegistry): void {
 
   server.registerTool(
     "sn_list_incidents",
     {
       description: "List incidents from ServiceNow with optional filters. Returns number, description, state, priority, assignment info.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         query: z.string().optional().describe("Encoded query (e.g. 'active=true^priority=1')"),
         state: z.string().optional().describe("Filter by state: 1=New, 2=In Progress, 3=On Hold, 6=Resolved, 7=Closed"),
         priority: z.string().optional().describe("Filter by priority: 1=Critical, 2=High, 3=Moderate, 4=Low, 5=Planning"),
@@ -20,7 +21,8 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
         offset: z.number().int().min(0).default(0),
       },
     },
-    async ({ query, state, priority, assignment_group, assigned_to, category, limit, offset }) => {
+    async ({ instance, query, state, priority, assignment_group, assigned_to, category, limit, offset }) => {
+      const client = registry.resolve(instance);
       const parts: string[] = [];
       if (query) parts.push(query);
       if (state) parts.push(`state=${state}`);
@@ -51,6 +53,7 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
     {
       description: "Create a new incident in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         short_description: z.string().describe("Brief description of the incident"),
         description: z.string().optional().describe("Detailed description"),
         urgency: z.enum(["1", "2", "3"]).optional().describe("1=High, 2=Medium, 3=Low"),
@@ -64,6 +67,7 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
       },
     },
     async (params) => {
+      const client = registry.resolve(params.instance);
       const data: Record<string, unknown> = { short_description: params.short_description };
       if (params.description) data["description"] = params.description;
       if (params.urgency) data["urgency"] = params.urgency;
@@ -87,11 +91,13 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
     {
       description: "Update an existing incident in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Incident sys_id"),
         data: z.record(z.string(), z.unknown()).describe("Fields to update (e.g. { state: '2', assigned_to: 'user_sys_id' })"),
       },
     },
-    async ({ sys_id, data }) => {
+    async ({ instance, sys_id, data }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("incident", sys_id, data);
       return {
         content: [{ type: "text" as const, text: JSON.stringify({ updated: true, number: record["number"], sys_id: record["sys_id"], record }, null, 2) }],
@@ -104,11 +110,13 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
     {
       description: "Add a customer-visible comment to an incident.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Incident sys_id"),
         comment: z.string().describe("Comment text (visible to customers)"),
       },
     },
-    async ({ sys_id, comment }) => {
+    async ({ instance, sys_id, comment }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("incident", sys_id, { comments: comment });
       return {
         content: [{ type: "text" as const, text: JSON.stringify({ success: true, number: record["number"], comment_added: true }, null, 2) }],
@@ -121,11 +129,13 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
     {
       description: "Add internal work notes to an incident (not visible to customers).",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Incident sys_id"),
         work_notes: z.string().describe("Work notes text (internal only)"),
       },
     },
-    async ({ sys_id, work_notes }) => {
+    async ({ instance, sys_id, work_notes }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("incident", sys_id, { work_notes });
       return {
         content: [{ type: "text" as const, text: JSON.stringify({ success: true, number: record["number"], work_notes_added: true }, null, 2) }],
@@ -138,13 +148,15 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
     {
       description: "Resolve an incident in ServiceNow (set state to Resolved).",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Incident sys_id"),
         resolution_code: z.string().optional().describe("Resolution code (e.g. 'Solved (Permanently)', 'Solved (Work Around)')"),
         resolution_notes: z.string().optional().describe("Resolution notes explaining the fix"),
         close_code: z.string().optional().describe("Close code"),
       },
     },
-    async ({ sys_id, resolution_code, resolution_notes, close_code }) => {
+    async ({ instance, sys_id, resolution_code, resolution_notes, close_code }) => {
+      const client = registry.resolve(instance);
       const data: Record<string, unknown> = { state: "6" }; // 6 = Resolved
       if (resolution_code) data["close_code"] = resolution_code;
       if (resolution_notes) data["close_notes"] = resolution_notes;
@@ -162,12 +174,14 @@ export function registerIncidentTools(server: McpServer, client: ServiceNowClien
     {
       description: "Close an incident in ServiceNow (set state to Closed).",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Incident sys_id"),
         close_code: z.string().optional().describe("Close code (e.g. 'Solved (Permanently)')"),
         close_notes: z.string().optional().describe("Close notes"),
       },
     },
-    async ({ sys_id, close_code, close_notes }) => {
+    async ({ instance, sys_id, close_code, close_notes }) => {
+      const client = registry.resolve(instance);
       const data: Record<string, unknown> = { state: "7" }; // 7 = Closed
       if (close_code) data["close_code"] = close_code;
       if (close_notes) data["close_notes"] = close_notes;

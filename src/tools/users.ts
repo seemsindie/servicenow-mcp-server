@@ -1,15 +1,16 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ServiceNowClient } from "../client/index.ts";
+import type { InstanceRegistry } from "../client/registry.ts";
 import { joinQueries } from "../utils/query.ts";
 
-export function registerUserTools(server: McpServer, client: ServiceNowClient): void {
+export function registerUserTools(server: McpServer, registry: InstanceRegistry): void {
 
   server.registerTool(
     "sn_list_users",
     {
       description: "List users from ServiceNow with optional filters.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         query: z.string().optional().describe("Encoded query"),
         active: z.boolean().optional().describe("Filter by active status"),
         department: z.string().optional().describe("Filter by department name"),
@@ -19,7 +20,8 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
         offset: z.number().int().min(0).default(0),
       },
     },
-    async ({ query, active, department, role, name, limit, offset }) => {
+    async ({ instance, query, active, department, role, name, limit, offset }) => {
+      const client = registry.resolve(instance);
       const parts: string[] = [];
       if (query) parts.push(query);
       if (active !== undefined) parts.push(`active=${active}`);
@@ -45,12 +47,14 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "Get a specific user by sys_id, user_name, or email.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().optional().describe("User sys_id"),
         user_name: z.string().optional().describe("Username"),
         email: z.string().optional().describe("Email address"),
       },
     },
-    async ({ sys_id, user_name, email }) => {
+    async ({ instance, sys_id, user_name, email }) => {
+      const client = registry.resolve(instance);
       if (sys_id) {
         const record = await client.getRecord("sys_user", sys_id, { sysparm_display_value: "true", sysparm_exclude_reference_link: "true" });
         return { content: [{ type: "text" as const, text: JSON.stringify(record, null, 2) }] };
@@ -70,6 +74,7 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "Create a new user in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         user_name: z.string().describe("Unique username"),
         first_name: z.string().describe("First name"),
         last_name: z.string().describe("Last name"),
@@ -81,9 +86,10 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
       },
     },
     async (params) => {
+      const client = registry.resolve(params.instance);
       const data: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(params)) {
-        if (v !== undefined) data[k] = v;
+        if (v !== undefined && k !== "instance") data[k] = v;
       }
       const record = await client.createRecord("sys_user", data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, sys_id: record["sys_id"], user_name: record["user_name"], record }, null, 2) }] };
@@ -95,11 +101,13 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "Update an existing user in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("User sys_id"),
         data: z.record(z.string(), z.unknown()).describe("Fields to update"),
       },
     },
-    async ({ sys_id, data }) => {
+    async ({ instance, sys_id, data }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("sys_user", sys_id, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, sys_id: record["sys_id"], record }, null, 2) }] };
     }
@@ -112,6 +120,7 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "List groups from ServiceNow with optional filters.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         query: z.string().optional().describe("Encoded query"),
         name: z.string().optional().describe("Filter by group name (LIKE match)"),
         type: z.string().optional().describe("Filter by group type"),
@@ -120,7 +129,8 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
         offset: z.number().int().min(0).default(0),
       },
     },
-    async ({ query, name, type, active, limit, offset }) => {
+    async ({ instance, query, name, type, active, limit, offset }) => {
+      const client = registry.resolve(instance);
       const parts: string[] = [];
       if (query) parts.push(query);
       if (name) parts.push(`nameLIKE${name}`);
@@ -145,6 +155,7 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "Create a new group in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         name: z.string().describe("Group name"),
         description: z.string().optional(),
         manager: z.string().optional().describe("Manager sys_id"),
@@ -154,9 +165,10 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
       },
     },
     async (params) => {
+      const client = registry.resolve(params.instance);
       const data: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(params)) {
-        if (v !== undefined) data[k] = v;
+        if (v !== undefined && k !== "instance") data[k] = v;
       }
       const record = await client.createRecord("sys_user_group", data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, sys_id: record["sys_id"], name: record["name"], record }, null, 2) }] };
@@ -168,11 +180,13 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "Update an existing group in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe("Group sys_id"),
         data: z.record(z.string(), z.unknown()).describe("Fields to update"),
       },
     },
-    async ({ sys_id, data }) => {
+    async ({ instance, sys_id, data }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord("sys_user_group", sys_id, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, sys_id: record["sys_id"], record }, null, 2) }] };
     }
@@ -183,11 +197,13 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "Add one or more users to a group in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         group_sys_id: z.string().describe("Group sys_id"),
         user_sys_ids: z.array(z.string()).describe("Array of user sys_ids to add"),
       },
     },
-    async ({ group_sys_id, user_sys_ids }) => {
+    async ({ instance, group_sys_id, user_sys_ids }) => {
+      const client = registry.resolve(instance);
       const results = [];
       for (const userId of user_sys_ids) {
         const record = await client.createRecord("sys_user_grmember", {
@@ -205,11 +221,13 @@ export function registerUserTools(server: McpServer, client: ServiceNowClient): 
     {
       description: "Remove one or more users from a group in ServiceNow.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         group_sys_id: z.string().describe("Group sys_id"),
         user_sys_ids: z.array(z.string()).describe("Array of user sys_ids to remove"),
       },
     },
-    async ({ group_sys_id, user_sys_ids }) => {
+    async ({ instance, group_sys_id, user_sys_ids }) => {
+      const client = registry.resolve(instance);
       const removed = [];
       for (const userId of user_sys_ids) {
         const result = await client.queryTable("sys_user_grmember", {

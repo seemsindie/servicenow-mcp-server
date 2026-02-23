@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "./config.ts";
-import { createAuthProvider } from "./auth/index.ts";
-import { ServiceNowClient } from "./client/index.ts";
+import { InstanceRegistry } from "./client/registry.ts";
 import { logger, setDebug } from "./utils/logger.ts";
 
 // Tool modules
@@ -19,6 +18,7 @@ import { registerCmdbTools } from "./tools/cmdb.ts";
 import { registerSchemaTools } from "./tools/schema.ts";
 import { registerSearchTools } from "./tools/search.ts";
 import { registerBatchTools } from "./tools/batch.ts";
+import { registerInstanceTools } from "./tools/instances.ts";
 
 // Resources
 import { registerResources } from "./resources/index.ts";
@@ -29,7 +29,7 @@ import { getPackageToolFilter } from "./packages/index.ts";
 /**
  * All tool registration functions with their package key.
  */
-const TOOL_MODULES: { key: string; register: (server: McpServer, client: ServiceNowClient) => void }[] = [
+const TOOL_MODULES: { key: string; register: (server: McpServer, registry: InstanceRegistry) => void }[] = [
   { key: "tables", register: registerTableTools },
   { key: "incidents", register: registerIncidentTools },
   { key: "users", register: registerUserTools },
@@ -53,18 +53,16 @@ export function createServer(config: Config): McpServer {
   setDebug(config.debug);
 
   logger.info("Creating ServiceNow MCP server");
-  logger.info(`Instance: ${config.instanceUrl}`);
-  logger.info(`Auth: ${config.auth.type}`);
+  logger.info(`Instances: ${config.instances.map((i) => i.name).join(", ")}`);
   logger.info(`Tool package: ${config.toolPackage}`);
 
-  // Create auth provider & SN client
-  const auth = createAuthProvider(config);
-  const client = new ServiceNowClient(config.instanceUrl, auth);
+  // Build instance registry (creates auth + client per instance)
+  const registry = new InstanceRegistry(config.instances);
 
   // Create MCP server
   const server = new McpServer({
     name: "servicenow-mcp-server",
-    version: "0.1.0",
+    version: "0.2.0",
   });
 
   // Get the tool filter for the selected package
@@ -74,7 +72,7 @@ export function createServer(config: Config): McpServer {
   let registeredModules = 0;
   for (const mod of TOOL_MODULES) {
     if (allowedModules === null || allowedModules.has(mod.key)) {
-      mod.register(server, client);
+      mod.register(server, registry);
       registeredModules++;
       logger.debug(`Registered tool module: ${mod.key}`);
     } else {
@@ -84,8 +82,12 @@ export function createServer(config: Config): McpServer {
 
   logger.info(`Registered ${registeredModules}/${TOOL_MODULES.length} tool modules`);
 
-  // Register MCP resources (always available)
-  registerResources(server, client);
+  // Register instance management tools (always available)
+  registerInstanceTools(server, registry);
+  logger.info("Registered instance management tools");
+
+  // Register MCP resources (always available, uses default instance)
+  registerResources(server, registry);
   logger.info("Registered MCP resources");
 
   return server;

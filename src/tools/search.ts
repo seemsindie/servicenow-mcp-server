@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ServiceNowClient } from "../client/index.ts";
+import type { InstanceRegistry } from "../client/registry.ts";
 
 /**
  * Natural language search — translates plain English queries into ServiceNow encoded queries.
@@ -70,19 +70,21 @@ function translateNL(nlQuery: string): { query: string; suggestedTable?: string 
   return { query: parts.join("^"), suggestedTable };
 }
 
-export function registerSearchTools(server: McpServer, client: ServiceNowClient): void {
+export function registerSearchTools(server: McpServer, registry: InstanceRegistry): void {
 
   server.registerTool(
     "sn_natural_language_search",
     {
       description: "Search ServiceNow using plain English. Translates natural language into encoded queries. Examples: 'high priority incidents assigned to me', 'emergency changes created this week', 'open problems from network team'.",
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         table: z.string().optional().describe("Table to search (auto-detected if possible, defaults to 'incident')"),
         nl_query: z.string().describe("Natural language query (e.g. 'active high priority incidents assigned to admin')"),
         limit: z.number().int().min(1).max(100).default(20),
       },
     },
-    async ({ table, nl_query, limit }) => {
+    async ({ instance, table, nl_query, limit }) => {
+      const client = registry.resolve(instance);
       const { query, suggestedTable } = translateNL(nl_query);
       const targetTable = table ?? suggestedTable ?? "incident";
 

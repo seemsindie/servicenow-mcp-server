@@ -1,4 +1,4 @@
-import type { Config } from "../config.ts";
+import type { AuthConfig } from "../config.ts";
 import { BasicAuthProvider } from "./basic.ts";
 import { OAuthProvider } from "./oauth.ts";
 import type { AuthProvider } from "./types.ts";
@@ -6,23 +6,26 @@ import type { AuthProvider } from "./types.ts";
 export type { AuthProvider } from "./types.ts";
 
 /**
- * Factory: creates the correct auth provider based on config.
+ * Factory: creates the correct auth provider for an instance.
+ *
+ * @param instanceUrl  The instance base URL (needed for OAuth token endpoint)
+ * @param auth         The auth configuration block (basic or oauth)
  */
-export function createAuthProvider(config: Config): AuthProvider {
-  switch (config.auth.type) {
+export function createAuthProvider(instanceUrl: string, auth: AuthConfig): AuthProvider {
+  switch (auth.type) {
     case "basic":
-      return new BasicAuthProvider(config.auth.username, config.auth.password);
+      return new BasicAuthProvider(auth.username, auth.password);
 
     case "oauth":
       return new OAuthProvider({
-        instanceUrl: config.instanceUrl,
-        clientId: config.auth.clientId,
-        clientSecret: config.auth.clientSecret,
-        username: config.auth.username,
-        password: config.auth.password,
+        instanceUrl,
+        clientId: auth.clientId,
+        clientSecret: auth.clientSecret,
+        username: auth.username,
+        password: auth.password,
       });
 
     default:
-      throw new Error(`Unsupported auth type: ${(config.auth as { type: string }).type}`);
+      throw new Error(`Unsupported auth type: ${(auth as { type: string }).type}`);
   }
 }

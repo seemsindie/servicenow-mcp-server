@@ -1,12 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ServiceNowClient } from "../client/index.ts";
+import type { InstanceRegistry } from "../client/registry.ts";
 import { joinQueries } from "../utils/query.ts";
 
 /** Helper: register list/create/update triplet for an agile table */
 function registerCrudTriple(
   server: McpServer,
-  client: ServiceNowClient,
+  registry: InstanceRegistry,
   opts: {
     table: string;
     singular: string;
@@ -23,12 +23,14 @@ function registerCrudTriple(
     {
       description: `List ${plural} from ServiceNow.`,
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         query: z.string().optional().describe("Encoded query"),
         limit: z.number().int().min(1).max(100).default(20),
         offset: z.number().int().min(0).default(0),
       },
     },
-    async ({ query, limit, offset }) => {
+    async ({ instance, query, limit, offset }: { instance?: string; query?: string; limit: number; offset: number }) => {
+      const client = registry.resolve(instance);
       const result = await client.queryTable(table, {
         sysparm_query: joinQueries(query ?? "", `ORDERBYDESCsys_created_on`),
         sysparm_fields: listFields,
@@ -40,7 +42,9 @@ function registerCrudTriple(
   );
 
   // Create
-  const createSchema: Record<string, z.ZodType> = {};
+  const createSchema: Record<string, z.ZodType> = {
+    instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
+  };
   for (const f of opts.createFields) {
     createSchema[f.name] = f.optional
       ? (f.schema as z.ZodString).optional().describe(f.desc)
@@ -53,8 +57,9 @@ function registerCrudTriple(
       inputSchema: createSchema,
     },
     async (params: Record<string, unknown>) => {
+      const client = registry.resolve(params.instance as string | undefined);
       const data: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(params)) { if (v !== undefined) data[k] = v; }
+      for (const [k, v] of Object.entries(params)) { if (v !== undefined && k !== "instance") data[k] = v; }
       const record = await client.createRecord(table, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ created: true, sys_id: record["sys_id"], number: record["number"], record }, null, 2) }] };
     }
@@ -66,20 +71,22 @@ function registerCrudTriple(
     {
       description: `Update an existing ${singular} in ServiceNow.`,
       inputSchema: {
+        instance: z.string().optional().describe("Target ServiceNow instance name (from config). Uses default instance if omitted."),
         sys_id: z.string().describe(`${singular} sys_id`),
         data: z.record(z.string(), z.unknown()).describe("Fields to update"),
       },
     },
-    async ({ sys_id, data }: { sys_id: string; data: Record<string, unknown> }) => {
+    async ({ instance, sys_id, data }: { instance?: string; sys_id: string; data: Record<string, unknown> }) => {
+      const client = registry.resolve(instance);
       const record = await client.updateRecord(table, sys_id, data);
       return { content: [{ type: "text" as const, text: JSON.stringify({ updated: true, sys_id: record["sys_id"], record }, null, 2) }] };
     }
   );
 }
 
-export function registerAgileTools(server: McpServer, client: ServiceNowClient): void {
+export function registerAgileTools(server: McpServer, registry: InstanceRegistry): void {
 
-  registerCrudTriple(server, client, {
+  registerCrudTriple(server, registry, {
     table: "rm_story", singular: "story", plural: "stories",
     listFields: "sys_id,number,short_description,state,priority,sprint,epic,assigned_to,story_points",
     createFields: [
@@ -94,7 +101,7 @@ export function registerAgileTools(server: McpServer, client: ServiceNowClient):
     ],
   });
 
-  registerCrudTriple(server, client, {
+  registerCrudTriple(server, registry, {
     table: "rm_epic", singular: "epic", plural: "epics",
     listFields: "sys_id,number,short_description,state,priority,product,assigned_to",
     createFields: [
@@ -106,7 +113,7 @@ export function registerAgileTools(server: McpServer, client: ServiceNowClient):
     ],
   });
 
-  registerCrudTriple(server, client, {
+  registerCrudTriple(server, registry, {
     table: "rm_scrum_task", singular: "scrum_task", plural: "scrum_tasks",
     listFields: "sys_id,number,short_description,state,type,story,assigned_to,remaining_hours",
     createFields: [
@@ -118,7 +125,7 @@ export function registerAgileTools(server: McpServer, client: ServiceNowClient):
     ],
   });
 
-  registerCrudTriple(server, client, {
+  registerCrudTriple(server, registry, {
     table: "pm_project", singular: "project", plural: "projects",
     listFields: "sys_id,number,short_description,state,priority,percent_complete,start_date,end_date,project_manager",
     createFields: [
