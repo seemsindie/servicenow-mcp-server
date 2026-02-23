@@ -367,7 +367,12 @@ servicenow-mcp-server/
 │   │   ├── batch.ts                     # Batch create/update
 │   │   ├── background-scripts.ts        # Background script execution via sys_trigger
 │   │   ├── platform-scripts.ts          # Business rules, client scripts, UI policies/actions/scripts
-│   │   └── scripted-rest.ts             # Scripted REST API definitions + operations
+│   │   ├── scripted-rest.ts             # Scripted REST API definitions + operations
+│   │   ├── widgets.ts                   # Service Portal widgets (sp_widget)
+│   │   ├── ui-pages.ts                  # UI pages (sys_ui_page)
+│   │   ├── flows.ts                     # Flow Designer (sys_hub_flow + related tables)
+│   │   ├── app-scope.ts                 # Application scope management
+│   │   └── script-sync.ts              # Script sync / local dev workflow
 │   │
 │   ├── resources/
 │   │   └── index.ts                     # servicenow:// URI resources (default instance)
@@ -419,7 +424,12 @@ servicenow-mcp-server/
 | Background Scripts | 2 | sys_trigger |
 | Platform Scripts | 25 | sys_script, sys_script_client, sys_ui_policy, sys_ui_action, sys_ui_script |
 | Scripted REST APIs | 7 | sys_ws_definition, sys_ws_operation |
-| **Total** | **130** | |
+| Widgets | 5 | sp_widget |
+| UI Pages | 5 | sys_ui_page |
+| Flow Designer | 6 | sys_hub_flow, sys_hub_flow_logic, sys_hub_flow_variable, sys_hub_flow_stage |
+| App Scope | 2 | sys_scope, sys_user_preference |
+| Script Sync | 3 | — (local file system + any script table) |
+| **Total** | **151** | |
 
 ## MCP Resources: 7
 
@@ -569,53 +579,57 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 
 ## Phase E — Service Portal Widgets (5 tools)
 
-- [ ] `src/tools/widgets.ts`
-  - [ ] `sn_list_widgets` — List `sp_widget` with name/category filters
-  - [ ] `sn_get_widget` — Get widget with all script bodies
-  - [ ] `sn_create_widget` — Create widget with template, css, client_script, server_script, link
-  - [ ] `sn_update_widget` — Update (push script changes)
-  - [ ] `sn_delete_widget` — Delete
-- [ ] Register module in `server.ts` with key `widgets`
-- [ ] Add to `platform_developer`, `full` packages. Add to new `portal_developer` package.
+- [x] `src/tools/widgets.ts`
+  - [x] `sn_list_widgets` — List `sp_widget` with name/category filters
+  - [x] `sn_get_widget` — Get widget with all script bodies (template, css, client_script, server_script, link, demo_data, option_schema)
+  - [x] `sn_create_widget` — Create widget with template, css, client_script, server_script, link
+  - [x] `sn_update_widget` — Update (push script changes)
+  - [x] `sn_delete_widget` — Delete
+- [x] Register module in `server.ts` with key `widgets`
+- [x] Add to `platform_developer`, `full` packages. Add to new `portal_developer` package.
 
 ## Phase F — UI Pages (5 tools)
 
-- [ ] `src/tools/ui-pages.ts`
-  - [ ] `sn_list_ui_pages` — List `sys_ui_page` records
-  - [ ] `sn_get_ui_page` — Get with html, client_script, processing_script
-  - [ ] `sn_create_ui_page` — Create page
-  - [ ] `sn_update_ui_page` — Update
-  - [ ] `sn_delete_ui_page` — Delete
-- [ ] Register + package
+- [x] `src/tools/ui-pages.ts`
+  - [x] `sn_list_ui_pages` — List `sys_ui_page` records
+  - [x] `sn_get_ui_page` — Get with html, client_script, processing_script
+  - [x] `sn_create_ui_page` — Create page
+  - [x] `sn_update_ui_page` — Update
+  - [x] `sn_delete_ui_page` — Delete
+- [x] Register module in `server.ts` with key `ui_pages`
+- [x] Add to `platform_developer`, `full`, `portal_developer` packages.
 
 ## Phase G — Flow Designer (6 tools)
 
 > Read-only + basic create. Logic blocks can't be created via REST (SN limitation).
 
-- [ ] `src/tools/flows.ts`
-  - [ ] `sn_list_flows` — Query `sys_hub_flow`
-  - [ ] `sn_get_flow` — Get flow + logic + variables in parallel
-  - [ ] `sn_create_flow` — Create basic flow definition
-  - [ ] `sn_list_flow_variables` — List `sys_hub_flow_variable` for a flow
-  - [ ] `sn_create_flow_variable` — Create flow variable
-  - [ ] `sn_list_flow_stages` — List `sys_hub_flow_stage`
-- [ ] Register + package
+- [x] `src/tools/flows.ts`
+  - [x] `sn_list_flows` — Query `sys_hub_flow`
+  - [x] `sn_get_flow` — Get flow + logic blocks + variables in parallel
+  - [x] `sn_create_flow` — Create basic flow definition (logic blocks must be added in UI)
+  - [x] `sn_list_flow_variables` — List `sys_hub_flow_variable` for a flow
+  - [x] `sn_create_flow_variable` — Create flow input/output variable
+  - [x] `sn_list_flow_stages` — List `sys_hub_flow_stage`
+- [x] Register module in `server.ts` with key `flows`
+- [x] Add to `platform_developer` and `full` packages.
 
 ## Phase H — Application Scope Management (2 tools)
 
-- [ ] `src/tools/app-scope.ts`
-  - [ ] `sn_set_application_scope` — Switch via `/api/now/ui/concoursepicker/application`
-  - [ ] `sn_get_current_application` — Get current scope
-- [ ] Register + package
+- [x] `src/tools/app-scope.ts`
+  - [x] `sn_get_current_application` — Get current scope (concoursepicker API with user_preference fallback)
+  - [x] `sn_set_application_scope` — Switch scope by sys_id or scope string. Uses concoursepicker API, falls back to user_preference.
+- [x] Register module in `server.ts` with key `app_scope`
+- [x] Add to `platform_developer`, `system_admin`, `full` packages.
 
 ## Phase I — Script Sync / Local Dev (3 tools)
 
-- [ ] `src/tools/script-sync.ts`
-  - [ ] `sn_sync_script_to_local` — Download script record to local file
-  - [ ] `sn_sync_local_to_script` — Upload local file to SN record
-  - [ ] `sn_watch_script` — Watch file for changes, auto-sync
-- [ ] `.sn-sync.json` manifest for mapping local paths to SN sys_ids
-- [ ] Register + package
+- [x] `src/tools/script-sync.ts`
+  - [x] `sn_sync_script_to_local` — Download script record to local file(s). Multi-field records (widgets, UI pages) create one file per field in a subdirectory.
+  - [x] `sn_sync_local_to_script` — Upload local file to SN record. Auto-detects target from `.sn-sync.json` manifest.
+  - [x] `sn_watch_and_sync` — Watch file for changes (polling), auto-sync on save. Runs in background.
+- [x] `.sn-sync.json` manifest for mapping local paths to SN sys_ids + table + field
+- [x] Register module in `server.ts` with key `script_sync`
+- [x] Add to `platform_developer`, `portal_developer`, `full` packages.
 
 ## Phase J — Progress Reporting (infrastructure)
 
@@ -648,20 +662,20 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 
 ## Updated Tool Count Projection
 
-| Phase | New Tools | Running Total |
-|-------|-----------|---------------|
-| Current | 93 | 93 |
-| A: Background Scripts | +2 | 95 |
-| B: Platform Scripts | +25 | 120 |
-| C: Enhanced Workflows | +3 | 123 |
-| D: Scripted REST APIs | +7 | 130 |
-| E: Widgets | +5 | 135 |
-| F: UI Pages | +5 | 140 |
-| G: Flow Designer | +6 | 146 |
-| H: App Scope | +2 | 148 |
-| I: Script Sync | +3 | 151 |
-| J: Progress Reporting | +0 | 151 |
-| K: Problem Mgmt | +7 | 158 |
-| L: Requests/RITM | +6 | 164 |
-| M: Catalog Validation | +1 | 165 |
-| N: Extras | +6 | **171** |
+| Phase | New Tools | Running Total | Status |
+|-------|-----------|---------------|--------|
+| Original | 93 | 93 | Done |
+| A: Background Scripts | +2 | 95 | Done |
+| B: Platform Scripts | +25 | 120 | Done |
+| C: Enhanced Workflows | +4 | 124 | Done |
+| D: Scripted REST APIs | +7 | 131 | Done |
+| E: Widgets | +5 | 136 | Done |
+| F: UI Pages | +5 | 141 | Done |
+| G: Flow Designer | +6 | 147 | Done |
+| H: App Scope | +2 | 149 | Done |
+| I: Script Sync | +3 | **151** | **Done** |
+| J: Progress Reporting | +0 | 151 | Pending |
+| K: Problem Mgmt | +7 | 158 | Pending |
+| L: Requests/RITM | +6 | 164 | Pending |
+| M: Catalog Validation | +1 | 165 | Pending |
+| N: Extras | +6 | **171** | Pending |

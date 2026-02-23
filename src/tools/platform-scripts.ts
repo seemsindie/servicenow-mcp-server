@@ -152,7 +152,7 @@ export function registerPlatformScriptTools(server: McpServer, registry: Instanc
   registerScriptTypeCrud(server, registry, {
     label: "business rule",
     table: "sys_script",
-    prefix: "sn_business_rule",
+    prefix: "business_rule",
     listFields: "sys_id,name,collection,when,order,active,description,sys_scope,sys_updated_on",
     listFilters: {
       name: z.string().optional().describe("Filter by name (LIKE match)"),
@@ -189,7 +189,7 @@ export function registerPlatformScriptTools(server: McpServer, registry: Instanc
   registerScriptTypeCrud(server, registry, {
     label: "client script",
     table: "sys_script_client",
-    prefix: "sn_client_script",
+    prefix: "client_script",
     listFields: "sys_id,name,table,type,field_name,active,description,sys_scope,sys_updated_on",
     listFilters: {
       name: z.string().optional().describe("Filter by name (LIKE match)"),
@@ -222,7 +222,7 @@ export function registerPlatformScriptTools(server: McpServer, registry: Instanc
   registerScriptTypeCrud(server, registry, {
     label: "ui policy",
     table: "sys_ui_policy",
-    prefix: "sn_ui_policy",
+    prefix: "ui_policy",
     listFields: "sys_id,short_description,table,conditions,on_load,reverse_if_false,active,order,sys_scope,sys_updated_on",
     listFilters: {
       name: z.string().optional().describe("Filter by short_description (LIKE match)"),
@@ -255,7 +255,7 @@ export function registerPlatformScriptTools(server: McpServer, registry: Instanc
   registerScriptTypeCrud(server, registry, {
     label: "ui action",
     table: "sys_ui_action",
-    prefix: "sn_ui_action",
+    prefix: "ui_action",
     listFields: "sys_id,name,table,active,form_button,form_link,list_button,list_link,order,sys_scope,sys_updated_on",
     listFilters: {
       name: z.string().optional().describe("Filter by name (LIKE match)"),
@@ -293,7 +293,7 @@ export function registerPlatformScriptTools(server: McpServer, registry: Instanc
   registerScriptTypeCrud(server, registry, {
     label: "ui script",
     table: "sys_ui_script",
-    prefix: "sn_ui_script",
+    prefix: "ui_script",
     listFields: "sys_id,name,active,description,global,sys_scope,sys_updated_on",
     listFilters: {
       name: z.string().optional().describe("Filter by name (LIKE match)"),

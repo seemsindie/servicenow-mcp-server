@@ -1,15 +1,19 @@
 # ServiceNow MCP Server
 
-A comprehensive [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for ServiceNow, built with **Bun** and **TypeScript**. Exposes 93 tools across 15 ServiceNow domains, 7 read-only resources, and role-based tool packages. Supports **multi-instance** configurations with per-call instance targeting.
+A comprehensive [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for ServiceNow, built with **Bun** and **TypeScript**. Exposes 151 tools across 22 ServiceNow domains, 7 read-only resources, and role-based tool packages. Supports **multi-instance** configurations with per-call instance targeting.
 
 ## Features
 
-- **93 MCP tools** covering incidents, changes, catalog, CMDB, users, knowledge, workflows, scripts, update sets, agile, schema discovery, natural language search, batch operations, and instance management
-- **Multi-instance support** — configure multiple ServiceNow instances (dev/test/prod) with per-instance auth; target any instance per tool call via the `instance` parameter
+- **151 MCP tools** spanning ITSM, platform development, service catalog, CMDB, knowledge, agile, and more
+- **Multi-instance support** — configure dev/test/prod with per-instance auth; target any instance per call
 - **7 MCP resources** — read-only `servicenow://` URIs for incidents, users, knowledge, tables, schema
-- **8 tool packages** — role-based subsets (service desk, change coordinator, platform developer, etc.)
-- **Two transports** — stdio (for Claude Desktop / Claude Code) and Streamable HTTP (for web integrations)
+- **10 tool packages** — role-based subsets (service desk, platform developer, portal developer, integration developer, etc.)
+- **Two transports** — stdio (Claude Desktop / Claude Code) and Streamable HTTP (web integrations)
 - **Basic & OAuth 2.0 auth** with automatic token refresh, configured per instance
+- **Background script execution** — run server-side JavaScript via `sys_trigger`
+- **Full platform development** — business rules, client scripts, UI policies, UI actions, UI scripts, script includes, scripted REST APIs, widgets, UI pages, workflows, Flow Designer
+- **Script sync / local dev** — download scripts to local files, edit in your IDE, auto-sync on save
+- **Application scope management** — switch scoped app context programmatically
 - **Single JSON config file** — no env vars, one source of truth
 
 ## Quick Start
@@ -194,14 +198,16 @@ Limit exposed tools by role. Set `toolPackage` in your config file:
 
 | Package | Modules | Use Case |
 |---|---|---|
-| `full` | All 14 modules (91 tools) + instance tools | Full access |
+| `full` | All 22 modules (149 tools) + instance tools | Full access (default) |
 | `service_desk` | tables, incidents, users, knowledge, search | Service desk agents |
 | `change_coordinator` | tables, changes, users, search | Change management |
 | `catalog_builder` | tables, catalog, search | Catalog administration |
 | `knowledge_author` | tables, knowledge, search | KB content creation |
-| `platform_developer` | tables, scripts, workflows, changesets, schema, search | Platform development |
-| `system_admin` | tables, users, schema, search, batch | System administration |
+| `platform_developer` | tables, scripts, platform_scripts, workflows, flows, changesets, schema, search, background_scripts, scripted_rest, widgets, ui_pages, app_scope, script_sync | Platform development |
+| `system_admin` | tables, users, schema, search, batch, app_scope | System administration |
 | `agile` | tables, agile, users, search | Agile teams |
+| `integration_developer` | tables, scripts, platform_scripts, scripted_rest, schema, search, batch, background_scripts | Integration & API development |
+| `portal_developer` | tables, widgets, ui_pages, catalog, scripts, platform_scripts, search, schema, script_sync | Service Portal development |
 
 Instance management tools (`sn_list_instances`, `sn_instance_info`) are always available regardless of package.
 
@@ -228,11 +234,64 @@ Instance management tools (`sn_list_instances`, `sn_instance_info`) are always a
 ### Knowledge Base (8 tools)
 `sn_list_knowledge_bases`, `sn_create_knowledge_base`, `sn_create_kb_category`, `sn_list_articles`, `sn_get_article`, `sn_create_article`, `sn_update_article`, `sn_publish_article`
 
-### Workflows (5 tools)
-`sn_list_workflows`, `sn_get_workflow`, `sn_create_workflow`, `sn_update_workflow`, `sn_delete_workflow`
+### Workflows (9 tools)
+`sn_list_workflows`, `sn_get_workflow`, `sn_create_workflow`, `sn_update_workflow`, `sn_delete_workflow`, `sn_create_workflow_full`, `sn_create_workflow_activity`, `sn_create_workflow_transition`, `sn_publish_workflow`
+
+**`sn_create_workflow_full`** is the recommended way to create workflows — orchestrates the full lifecycle in one call: creates the base workflow, version, activities, transitions (with optional conditions), and optionally publishes. Activities are referenced by name or array index in transition definitions.
 
 ### Script Includes (5 tools)
 `sn_list_script_includes`, `sn_get_script_include`, `sn_create_script_include`, `sn_update_script_include`, `sn_delete_script_include`
+
+### Background Script Execution (2 tools)
+`sn_execute_background_script`, `sn_create_fix_script`
+
+**`sn_execute_background_script`** runs server-side JavaScript on the instance via the `sys_trigger` mechanism — creates a one-shot scheduled trigger that fires in ~1 second, executes with full GlideRecord/GlideSystem access, and auto-deletes. Falls back to creating a local fix script if trigger creation fails.
+
+### Platform Script Types (25 tools)
+
+Full CRUD (list, get, create, update, delete) for five script types:
+
+| Type | Table | Tools |
+|---|---|---|
+| Business Rules | `sys_script` | `sn_list_business_rules`, `sn_get_business_rule`, `sn_create_business_rule`, `sn_update_business_rule`, `sn_delete_business_rule` |
+| Client Scripts | `sys_script_client` | `sn_list_client_scripts`, `sn_get_client_script`, `sn_create_client_script`, `sn_update_client_script`, `sn_delete_client_script` |
+| UI Policies | `sys_ui_policy` | `sn_list_ui_policys`, `sn_get_ui_policy`, `sn_create_ui_policy`, `sn_update_ui_policy`, `sn_delete_ui_policy` |
+| UI Actions | `sys_ui_action` | `sn_list_ui_actions`, `sn_get_ui_action`, `sn_create_ui_action`, `sn_update_ui_action`, `sn_delete_ui_action` |
+| UI Scripts | `sys_ui_script` | `sn_list_ui_scripts`, `sn_get_ui_script`, `sn_create_ui_script`, `sn_update_ui_script`, `sn_delete_ui_script` |
+
+### Scripted REST APIs (7 tools)
+`sn_list_scripted_rest_apis`, `sn_get_scripted_rest_api`, `sn_create_scripted_rest_api`, `sn_update_scripted_rest_api`, `sn_create_rest_resource`, `sn_update_rest_resource`, `sn_delete_rest_resource`
+
+**`sn_get_scripted_rest_api`** fetches the API definition and all its resource operations in parallel. **`sn_create_rest_resource`** creates an endpoint with HTTP method, path (supports `{param}` syntax), and a script handler with access to `request` and `response` objects.
+
+### Service Portal Widgets (5 tools)
+`sn_list_widgets`, `sn_get_widget`, `sn_create_widget`, `sn_update_widget`, `sn_delete_widget`
+
+**`sn_get_widget`** returns all script components: HTML template, CSS/SCSS, client script (Angular controller), server script, link function, demo data, and option schema. Widgets can be looked up by `sys_id` or widget `id`.
+
+### UI Pages (5 tools)
+`sn_list_ui_pages`, `sn_get_ui_page`, `sn_create_ui_page`, `sn_update_ui_page`, `sn_delete_ui_page`
+
+Each UI page has three script components: `html` (Jelly/HTML body), `client_script`, and `processing_script` (server-side).
+
+### Flow Designer (6 tools)
+`sn_list_flows`, `sn_get_flow`, `sn_create_flow`, `sn_list_flow_variables`, `sn_create_flow_variable`, `sn_list_flow_stages`
+
+**`sn_get_flow`** fetches the flow definition plus all logic blocks (`sys_hub_flow_logic`) and variables (`sys_hub_flow_variable`) in parallel. Note: Flow Designer logic blocks cannot be fully created via REST API — use `sn_create_flow` for the definition and add actions/conditions in the Flow Designer UI.
+
+### Application Scope (2 tools)
+`sn_get_current_application`, `sn_set_application_scope`
+
+Switch the active application scope before creating records in a scoped app. `sn_set_application_scope` accepts either a `sys_id` or a scope string (e.g. `x_myapp_module`) and resolves it automatically.
+
+### Script Sync / Local Dev (3 tools)
+`sn_sync_script_to_local`, `sn_sync_local_to_script`, `sn_watch_and_sync`
+
+Local development workflow:
+1. **`sn_sync_script_to_local`** — download any script record to local file(s). Multi-field records (widgets, UI pages) create one file per component in a subdirectory. Creates a `.sn-sync.json` manifest tracking the mapping.
+2. Edit in your IDE with full syntax highlighting, linting, IntelliSense.
+3. **`sn_sync_local_to_script`** — push the local file back to ServiceNow. Auto-detects the target from the manifest.
+4. **`sn_watch_and_sync`** — watch a file for changes and auto-sync on save (2s polling). Runs in background.
 
 ### Update Sets (7 tools)
 `sn_list_update_sets`, `sn_get_update_set`, `sn_create_update_set`, `sn_update_update_set`, `sn_set_current_update_set`, `sn_commit_update_set`, `sn_add_to_update_set`
@@ -247,7 +306,7 @@ Instance management tools (`sn_list_instances`, `sn_instance_info`) are always a
 `sn_get_table_schema`, `sn_discover_table`, `sn_list_tables`
 
 ### Natural Language Search (1 tool)
-`sn_natural_language_search` — translates plain English to ServiceNow encoded queries
+`sn_natural_language_search` — translates plain English to ServiceNow encoded queries (16 pattern matchers)
 
 ### Batch Operations (2 tools)
 `sn_batch_create`, `sn_batch_update` — parallel record creation/updates across tables
@@ -293,9 +352,32 @@ src/
     registry.ts     # InstanceRegistry — maps instance names to clients
     errors.ts       # SN-specific error classes
     types.ts        # API response types
-  tools/            # 14 domain tool modules + instance management
+  tools/            # 22 domain tool modules + instance management
+    tables.ts               # Generic Table API CRUD (any table)
+    incidents.ts            # Incident management + convenience
+    changes.ts              # Change requests + tasks + approvals
+    users.ts                # Users, groups, members
+    catalog.ts              # Service catalog items/categories/variables
+    knowledge.ts            # Knowledge bases, categories, articles
+    workflows.ts            # Workflows + orchestration (version/activities/transitions/publish)
+    scripts.ts              # Script includes
+    changesets.ts           # Update sets / changesets
+    agile.ts                # Stories, epics, scrum tasks, projects
+    cmdb.ts                 # CMDB CIs + relationships
+    schema.ts               # Schema discovery / table introspection
+    search.ts               # Natural language search
+    batch.ts                # Batch create/update
+    background-scripts.ts   # Background script execution via sys_trigger
+    platform-scripts.ts     # Business rules, client scripts, UI policies/actions/scripts
+    scripted-rest.ts        # Scripted REST API definitions + operations
+    widgets.ts              # Service Portal widgets (sp_widget)
+    ui-pages.ts             # UI pages (sys_ui_page)
+    flows.ts                # Flow Designer (sys_hub_flow + related)
+    app-scope.ts            # Application scope management
+    script-sync.ts          # Script sync / local development workflow
+    instances.ts            # Instance management (always available)
   resources/        # 7 servicenow:// MCP resources (default instance)
-  packages/         # 8 role-based tool package definitions
+  packages/         # 10 role-based tool package definitions
   utils/            # Logger (stderr-safe), encoded query builder
 
 config/
@@ -306,6 +388,8 @@ config/
 
 - `@modelcontextprotocol/sdk` — MCP protocol implementation
 - `zod` — Schema validation
+
+Zero other runtime dependencies. Bun provides native fetch, test runner, and TypeScript execution.
 
 ## License
 

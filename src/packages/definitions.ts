@@ -11,6 +11,7 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
     "knowledge", "workflows", "scripts", "changesets", "agile",
     "cmdb", "schema", "search", "batch",
     "background_scripts", "platform_scripts", "scripted_rest",
+    "widgets", "ui_pages", "flows", "app_scope", "script_sync",
   ],
 
   /** Service desk agents — incidents, users, knowledge */
@@ -33,15 +34,16 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
     "tables", "knowledge", "search",
   ],
 
-  /** Platform developers — scripts, workflows, update sets, background scripts, all script types, REST APIs */
+  /** Platform developers — full dev toolkit */
   platform_developer: [
-    "tables", "scripts", "platform_scripts", "workflows", "changesets",
-    "schema", "search", "background_scripts", "scripted_rest",
+    "tables", "scripts", "platform_scripts", "workflows", "flows",
+    "changesets", "schema", "search", "background_scripts",
+    "scripted_rest", "widgets", "ui_pages", "app_scope", "script_sync",
   ],
 
   /** System administrators — users, groups, schema */
   system_admin: [
-    "tables", "users", "schema", "search", "batch",
+    "tables", "users", "schema", "search", "batch", "app_scope",
   ],
 
   /** Agile teams — stories, epics, tasks, projects */
@@ -53,5 +55,11 @@ export const TOOL_PACKAGES: Record<string, string[]> = {
   integration_developer: [
     "tables", "scripts", "platform_scripts", "scripted_rest",
     "schema", "search", "batch", "background_scripts",
+  ],
+
+  /** Portal developers — widgets, UI pages, catalog, scripts */
+  portal_developer: [
+    "tables", "widgets", "ui_pages", "catalog", "scripts",
+    "platform_scripts", "search", "schema", "script_sync",
   ],
 };

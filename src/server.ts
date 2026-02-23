@@ -22,6 +22,11 @@ import { registerInstanceTools } from "./tools/instances.ts";
 import { registerBackgroundScriptTools } from "./tools/background-scripts.ts";
 import { registerPlatformScriptTools } from "./tools/platform-scripts.ts";
 import { registerScriptedRestTools } from "./tools/scripted-rest.ts";
+import { registerWidgetTools } from "./tools/widgets.ts";
+import { registerUiPageTools } from "./tools/ui-pages.ts";
+import { registerFlowTools } from "./tools/flows.ts";
+import { registerAppScopeTools } from "./tools/app-scope.ts";
+import { registerScriptSyncTools } from "./tools/script-sync.ts";
 
 // Resources
 import { registerResources } from "./resources/index.ts";
@@ -50,6 +55,11 @@ const TOOL_MODULES: { key: string; register: (server: McpServer, registry: Insta
   { key: "background_scripts", register: registerBackgroundScriptTools },
   { key: "platform_scripts", register: registerPlatformScriptTools },
   { key: "scripted_rest", register: registerScriptedRestTools },
+  { key: "widgets", register: registerWidgetTools },
+  { key: "ui_pages", register: registerUiPageTools },
+  { key: "flows", register: registerFlowTools },
+  { key: "app_scope", register: registerAppScopeTools },
+  { key: "script_sync", register: registerScriptSyncTools },
 ];
 
 /**
@@ -68,7 +78,7 @@ export function createServer(config: Config): McpServer {
   // Create MCP server
   const server = new McpServer({
     name: "servicenow-mcp-server",
-    version: "0.2.0",
+    version: "0.3.0",
   });
 
   // Get the tool filter for the selected package
