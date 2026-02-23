@@ -658,6 +658,102 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 - [ ] Batch delete: `sn_batch_delete` in batch.ts
 - [ ] Import sets: `sn_create_import_set`, `sn_run_transform`
 
+## Phase O — Smart Name/Number Resolution (utility + tool enhancements) ⚡ HIGH PRIORITY
+
+> Their biggest UX advantage: tools auto-resolve human-readable names ("Beth Anglin") and record
+> numbers ("INC0010045") to sys_ids. Our tools require raw sys_ids, which forces callers to do
+> manual lookups. This phase adds a resolution utility layer and wires it into existing tools.
+
+- [ ] `src/utils/resolve.ts` — Resolution utility module
+  - [ ] `resolveUserIdentifier(client, value)` — If value looks like a sys_id (32-char hex), pass through. Otherwise query `sys_user` by `name LIKE` or `user_name=` and return sys_id. Cache results in a per-request Map.
+  - [ ] `resolveRecordNumber(client, value, table?)` — If value looks like a sys_id, pass through. If it matches `INC\d+`, `CHG\d+`, `PRB\d+`, `RITM\d+`, `KB\d+` etc., query the appropriate table by `number=` and return sys_id. If `table` hint is given, query that table's `number` field.
+  - [ ] `resolveGroupIdentifier(client, value)` — Resolve group name to sys_id (query `sys_user_group` by `name=`).
+- [ ] Wire resolution into existing incident tools:
+  - [ ] `sn_update_incident` — resolve `assigned_to`, `caller_id` params via `resolveUserIdentifier`
+  - [ ] `sn_add_incident_comment` / `sn_add_incident_work_notes` — accept incident number or sys_id
+  - [ ] `sn_assign_incident` — resolve user name or sys_id for assignee, group name or sys_id for group
+- [ ] Wire resolution into existing change tools:
+  - [ ] `sn_update_change` — resolve `assigned_to`, `requested_by` params
+  - [ ] `sn_add_change_comment` / `sn_add_change_work_notes` — accept change number or sys_id
+- [ ] Wire resolution into existing user tools:
+  - [ ] `sn_add_group_member` — accept user name or sys_id, group name or sys_id
+- [ ] Add tests for the resolution utility in `tests/utils/resolve.test.ts`
+
+## Phase P — Update Set Move & Clone (2 tools)
+
+> Their `SN-Move-Records-To-Update-Set` and `SN-Clone-Update-Set` tools. Useful for developers
+> reorganizing work across update sets or duplicating a set as a starting point.
+
+- [ ] Add to `src/tools/changesets.ts`:
+  - [ ] `sn_move_to_update_set` — Move records to a target update set. Accepts:
+    - `target_update_set` (sys_id) — destination update set
+    - `sys_ids` (string[]) — specific `sys_update_xml` records to move, OR
+    - `source_update_set` (sys_id) — move all records from another set, OR
+    - `since` / `until` (datetime) — move records by time range
+    - Implementation: query `sys_update_xml` with filters, batch-update `update_set` field
+  - [ ] `sn_clone_update_set` — Clone an update set (create new set + copy all `sys_update_xml` records)
+    - `source_update_set` (sys_id)
+    - `name` (string) — name for the new set
+    - Implementation: create new `sys_update_set`, query source's `sys_update_xml`, create copies pointing to new set
+- [ ] Register in packages: `platform_developer`, `system_admin`, `full`
+
+## Phase Q — Update Set Inspection (enhancement to existing tool)
+
+> Their inspection groups `sys_update_xml` records by type and shows component breakdown.
+> Our `sn_get_update_set` just returns raw records. This enriches the response.
+
+- [ ] Enhance `sn_get_update_set` in `src/tools/changesets.ts`:
+  - [ ] After fetching `sys_update_xml` records, group them by `type` field
+  - [ ] Return structured breakdown: `{ components: { "Business Rule": [...], "UI Policy": [...], ... }, summary: { total: N, by_type: { "Business Rule": 3, ... } } }`
+  - [ ] Include `action` (INSERT/UPDATE/DELETE) in each component entry
+- [ ] Update existing tests if any for `sn_get_update_set`
+
+## Phase R — Static Table Metadata Cache
+
+> Their `comprehensive-table-definitions.json` has 94 tables with label, key_field, display_field,
+> required_fields. This avoids hitting the live API for common schema lookups and enables
+> better tool descriptions and validation.
+
+- [ ] `src/config/table-definitions.json` — Static metadata for ~100 common SN tables
+  - [ ] Fields per entry: `table`, `label`, `key_field`, `display_field`, `required_fields[]`, `common_fields[]`
+  - [ ] Cover: task-based tables (incident, change_request, problem, sc_request, sc_req_item, sc_task), sys tables (sys_user, sys_user_group, sys_user_role, sys_choice), CMDB (cmdb_ci, cmdb_ci_server, cmdb_ci_service), knowledge (kb_knowledge, kb_category), catalog (sc_catalog, sc_cat_item, sc_cat_item_category, sc_variable), platform (sys_script, sys_script_include, sys_ui_policy, sys_ui_action, sys_ui_script, sys_ui_page), update sets (sys_update_set, sys_update_xml), workflows (wf_workflow, wf_workflow_version, wf_activity), flows (sys_hub_flow), REST (sys_web_service, sys_rest_message), widgets (sp_widget, sp_portal, sp_page), agile (rm_story, rm_epic, rm_sprint), and more
+- [ ] `src/utils/table-metadata.ts` — Loader + lookup functions
+  - [ ] `getTableMetadata(tableName): TableDefinition | undefined`
+  - [ ] `getDisplayField(tableName): string` — returns display_field or falls back to `"name"`
+  - [ ] `getRequiredFields(tableName): string[]`
+  - [ ] `isKnownTable(tableName): boolean`
+- [ ] Wire into `src/tools/tables.ts` — use display_field for better query defaults
+- [ ] Wire into `src/tools/schema.ts` — return cached metadata alongside live API results when available
+
+## Phase S — Enhanced Schema Discovery (enhancements to existing tools)
+
+> Their `SN-Discover-Table-Schema` optionally fetches choice lists, UI policies, business rules,
+> and field constraints alongside basic dictionary info. Our schema tools only query
+> `sys_db_object` + `sys_dictionary` + reference extraction.
+
+- [ ] Enhance `sn_get_table_schema` in `src/tools/schema.ts`:
+  - [ ] Add optional `include_choices` (boolean) — fetch `sys_choice` records for choice/reference fields
+  - [ ] Add optional `include_policies` (boolean) — fetch `sys_ui_policy` records attached to the table
+  - [ ] Add optional `include_business_rules` (boolean) — fetch `sys_script` records for the table
+  - [ ] Add optional `include_constraints` (boolean) — fetch `sys_dictionary` constraint info (max_length, mandatory, read_only, default_value)
+  - [ ] All optional params default to `false` to keep current behavior unchanged
+- [ ] New tool `sn_explain_field` in `src/tools/schema.ts`:
+  - [ ] Input: `table`, `field`
+  - [ ] Returns: field type, label, max_length, mandatory, read_only, default_value, reference target, choice list (if applicable), dependent field, help text (`sys_documentation`), known REST API issues/gotchas (from static map)
+  - [ ] Query: `sys_dictionary` + `sys_documentation` + `sys_choice` (if choice field) in parallel
+
+## Phase T — Progress Reporting (replaces Phase J)
+
+> Wire MCP SDK `notifications/progress` for long-running operations. Their server reports
+> progress with adaptive frequency for batch/workflow/move operations.
+
+- [ ] `src/utils/progress.ts` — Progress reporting utility
+  - [ ] `createProgressReporter(server, token, total)` — returns `{ advance(n?), complete(), fail(msg) }`
+  - [ ] Adaptive frequency: skip notifications if < 100ms since last one (avoid flooding)
+  - [ ] Wire into `sn_batch_update` / `sn_batch_create` in `src/tools/batch.ts`
+  - [ ] Wire into `sn_move_to_update_set` (Phase P) and `sn_clone_update_set`
+  - [ ] Wire into `sn_watch_and_sync` in `src/tools/script-sync.ts`
+
 ---
 
 ## Updated Tool Count Projection
@@ -674,8 +770,14 @@ Zero other deps. Bun provides native fetch, native test runner, native TypeScrip
 | G: Flow Designer | +6 | 147 | Done |
 | H: App Scope | +2 | 149 | Done |
 | I: Script Sync | +3 | **151** | **Done** |
-| J: Progress Reporting | +0 | 151 | Pending |
+| J: Progress Reporting | — | — | Replaced by Phase T |
 | K: Problem Mgmt | +7 | 158 | Pending |
 | L: Requests/RITM | +6 | 164 | Pending |
 | M: Catalog Validation | +1 | 165 | Pending |
-| N: Extras | +6 | **171** | Pending |
+| N: Extras | +6 | 171 | Pending |
+| O: Smart Resolution | +0 (enhancements) | 171 | Pending ⚡ |
+| P: Update Set Move/Clone | +2 | 173 | Pending |
+| Q: Update Set Inspection | +0 (enhancement) | 173 | Pending |
+| R: Static Table Metadata | +0 (infra) | 173 | Pending |
+| S: Enhanced Schema | +1 | 174 | Pending |
+| T: Progress Reporting | +0 (infra) | **174** | Pending |
