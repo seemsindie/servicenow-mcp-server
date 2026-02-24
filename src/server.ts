@@ -72,6 +72,21 @@ const TOOL_MODULES: { key: string; register: (server: McpServer, registry: Insta
   { key: "import_sets", register: registerImportSetTools },
 ];
 
+/** Abbreviations that should be uppercased in tool titles. */
+const UPPERCASE_ABBREVIATIONS = new Set(["ci", "kb", "api", "ui", "rest", "cmdb", "apis"]);
+
+/**
+ * Generates a human-readable title from a snake_case tool name.
+ * e.g. "sn_get_record" -> "Get Record", "sn_list_ci_relationships" -> "List CI Relationships"
+ */
+function generateToolTitle(name: string): string {
+  const stripped = name.startsWith("sn_") ? name.slice(3) : name;
+  return stripped
+    .split("_")
+    .map((word) => (UPPERCASE_ABBREVIATIONS.has(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(" ");
+}
+
 /**
  * Creates and configures the MCP server with all tools and resources.
  */
@@ -90,6 +105,15 @@ export function createServer(config: Config): McpServer {
     name: "servicenow-mcp-server",
     version: "0.4.0",
   });
+
+  // Wrap registerTool to auto-generate human-readable titles from tool names
+  const originalRegisterTool = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: Record<string, unknown>, ...rest: unknown[]) => {
+    if (!config.title) {
+      config.title = generateToolTitle(name);
+    }
+    return originalRegisterTool(name, config, ...rest);
+  }) as typeof server.registerTool;
 
   // Get the tool filter for the selected package
   const allowedModules = getPackageToolFilter(config.toolPackage);

@@ -165,22 +165,14 @@ sn_instance_info(instance: "dev")
 
 MCP resources (`servicenow://` URIs) always use the default instance.
 
-## 🖥️ Claude Desktop Integration
+## 🖥️ Client Integrations
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+All integrations use the same MCP server. Replace `/path/to/servicenow-mcp-server` with the actual path where you cloned the repo. Place your `config/servicenow-config.json` in the project directory, or use `--config` to point elsewhere.
 
-```json
-{
-  "mcpServers": {
-    "servicenow": {
-      "command": "bun",
-      "args": ["run", "/path/to/servicenow-mcp-server/src/index.ts"]
-    }
-  }
-}
-```
+<details>
+<summary><strong>Claude Desktop</strong></summary>
 
-Place your `config/servicenow-config.json` in the project directory. Or use `--config` to point elsewhere:
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
@@ -195,6 +187,161 @@ Place your `config/servicenow-config.json` in the project directory. Or use `--c
   }
 }
 ```
+
+Restart Claude Desktop after saving.
+
+</details>
+
+<details>
+<summary><strong>Claude Code (CLI)</strong></summary>
+
+Add via the CLI:
+
+```bash
+claude mcp add servicenow -- bun run /path/to/servicenow-mcp-server/src/index.ts --config /path/to/servicenow-config.json
+```
+
+Or add to `.claude/settings.json` (project-level) or `~/.claude/settings.json` (global):
+
+```json
+{
+  "mcpServers": {
+    "servicenow": {
+      "command": "bun",
+      "args": [
+        "run", "/path/to/servicenow-mcp-server/src/index.ts",
+        "--config", "/path/to/servicenow-config.json"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>VS Code (Copilot)</strong></summary>
+
+Add to `.vscode/mcp.json` in your workspace (create the file if it doesn't exist):
+
+```json
+{
+  "servers": {
+    "servicenow": {
+      "command": "bun",
+      "args": [
+        "run", "/path/to/servicenow-mcp-server/src/index.ts",
+        "--config", "/path/to/servicenow-config.json"
+      ]
+    }
+  }
+}
+```
+
+Or add to your user `settings.json` (`Cmd+Shift+P` > "Preferences: Open User Settings (JSON)"):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "servicenow": {
+        "command": "bun",
+        "args": [
+          "run", "/path/to/servicenow-mcp-server/src/index.ts",
+          "--config", "/path/to/servicenow-config.json"
+        ]
+      }
+    }
+  }
+}
+```
+
+Requires VS Code 1.99+ with the GitHub Copilot extension. Enable MCP support with `"chat.mcp.enabled": true` in settings if prompted.
+
+</details>
+
+<details>
+<summary><strong>Cursor</strong></summary>
+
+Add to `.cursor/mcp.json` in your project root (create the file if it doesn't exist):
+
+```json
+{
+  "mcpServers": {
+    "servicenow": {
+      "command": "bun",
+      "args": [
+        "run", "/path/to/servicenow-mcp-server/src/index.ts",
+        "--config", "/path/to/servicenow-config.json"
+      ]
+    }
+  }
+}
+```
+
+For global (all projects), add to `~/.cursor/mcp.json` instead. Restart Cursor after saving. The server will appear in **Cursor Settings > MCP**.
+
+</details>
+
+<details>
+<summary><strong>Windsurf</strong></summary>
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "servicenow": {
+      "command": "bun",
+      "args": [
+        "run", "/path/to/servicenow-mcp-server/src/index.ts",
+        "--config", "/path/to/servicenow-config.json"
+      ]
+    }
+  }
+}
+```
+
+Restart Windsurf after saving.
+
+</details>
+
+<details>
+<summary><strong>Amazon Q CLI</strong></summary>
+
+Add to `~/.aws/amazonq/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "servicenow": {
+      "command": "bun",
+      "args": [
+        "run", "/path/to/servicenow-mcp-server/src/index.ts",
+        "--config", "/path/to/servicenow-config.json"
+      ]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Streamable HTTP (any client)</strong></summary>
+
+For clients that support HTTP-based MCP transport instead of stdio:
+
+```bash
+bun run start:http -- --config /path/to/servicenow-config.json
+# Server starts at http://127.0.0.1:3000
+# MCP endpoint: /mcp
+# Health check: GET /health
+```
+
+Point your client to `http://127.0.0.1:3000/mcp` as the MCP server URL.
+
+</details>
 
 ## 📦 Tool Packages
 
