@@ -18,10 +18,12 @@ export type { SNRecord, SNQueryParams, SNPaginatedResult } from "./types.ts";
 export class ServiceNowClient {
   private readonly baseUrl: string;
   private readonly auth: AuthProvider;
+  private readonly requestTimeoutMs: number;
 
-  constructor(instanceUrl: string, auth: AuthProvider) {
+  constructor(instanceUrl: string, auth: AuthProvider, requestTimeoutMs = 30_000) {
     this.baseUrl = instanceUrl;
     this.auth = auth;
+    this.requestTimeoutMs = requestTimeoutMs;
   }
 
   // ── Table API ───────────────────────────────────────────
@@ -157,7 +159,11 @@ export class ServiceNowClient {
       Accept: "application/json",
     };
 
-    const init: RequestInit = { method, headers };
+    const init: RequestInit = {
+      method,
+      headers,
+      signal: AbortSignal.timeout(this.requestTimeoutMs),
+    };
 
     if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
       headers["Content-Type"] = "application/json";
@@ -166,7 +172,15 @@ export class ServiceNowClient {
 
     logger.debug(`${method} ${url}`);
 
-    const response = await fetch(url, init);
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "TimeoutError") {
+        throw new Error(`Request timed out after ${this.requestTimeoutMs}ms: ${method} ${url}`);
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       const text = await response.text();

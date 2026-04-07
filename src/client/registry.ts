@@ -33,7 +33,7 @@ export class InstanceRegistry {
       }
 
       const auth = createAuthProvider(inst.url, inst.auth);
-      const client = new ServiceNowClient(inst.url, auth);
+      const client = new ServiceNowClient(inst.url, auth, inst.requestTimeoutMs);
 
       this.clients.set(inst.name, client);
       this.meta.set(inst.name, {

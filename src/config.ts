@@ -35,6 +35,7 @@ const InstanceSchema = z.object({
   auth: AuthSchema,
   default: z.boolean().default(false),
   description: z.string().optional(),
+  requestTimeoutMs: z.number().int().positive().default(30_000).describe("HTTP request timeout in milliseconds (default: 30000)"),
 });
 
 // ── Full config file schema ──────────────────────────────────────────
