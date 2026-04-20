@@ -1,0 +1,62 @@
+# Coolify deployment for the ServiceNow MCP server.
+#
+# Required Coolify env vars (set in Coolify UI → Environment Variables):
+#   SN_INSTANCE_URL         e.g. https://monochromedemo3.service-now.com
+#   SN_AUTH_TYPE            "basic" or "oauth"
+#   SN_USERNAME             (both auth types)
+#   SN_PASSWORD             (both auth types)
+#   SN_OAUTH_CLIENT_ID      (oauth only)
+#   SN_OAUTH_CLIENT_SECRET  (oauth only)
+#   MCP_BASIC_AUTH          htpasswd-style string, e.g. `mcp:$$2b$$12$$...`
+#                           Generate with: htpasswd -nbB mcp 'your-pass'
+#                           Escape every `$` in the hash as `$$` so compose doesn't
+#                           interpolate it.
+#
+# Optional:
+#   SN_INSTANCE_NAME  (default "default")
+#   SN_TOOL_PACKAGE   (default "full")
+#   SN_DEBUG          (default "false")
+
+services:
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - SERVICE_FQDN_MCP_SERVER_3000=https://sn-mcp.indielab.link
+      - MCP_HTTP_HOST=0.0.0.0
+      - MCP_HTTP_PORT=3000
+      - SN_INSTANCE_URL=${SN_INSTANCE_URL}
+      - SN_INSTANCE_NAME=${SN_INSTANCE_NAME:-default}
+      - SN_AUTH_TYPE=${SN_AUTH_TYPE}
+      - SN_USERNAME=${SN_USERNAME:-}
+      - SN_PASSWORD=${SN_PASSWORD:-}
+      - SN_OAUTH_CLIENT_ID=${SN_OAUTH_CLIENT_ID:-}
+      - SN_OAUTH_CLIENT_SECRET=${SN_OAUTH_CLIENT_SECRET:-}
+      - SN_TOOL_PACKAGE=${SN_TOOL_PACKAGE:-full}
+      - SN_DEBUG=${SN_DEBUG:-false}
+    labels:
+      - traefik.enable=true
+      # HTTPS router — Host rule, TLS, letsencrypt, basic-auth
+      - "traefik.http.routers.sn-mcp-secure.rule=Host(`sn-mcp.indielab.link`)"
+      - traefik.http.routers.sn-mcp-secure.entryPoints=https
+      - traefik.http.routers.sn-mcp-secure.tls=true
+      - traefik.http.routers.sn-mcp-secure.tls.certresolver=letsencrypt
+      - traefik.http.routers.sn-mcp-secure.middlewares=sn-mcp-auth
+      - traefik.http.routers.sn-mcp-secure.service=sn-mcp-svc
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.sn-mcp-http.rule=Host(`sn-mcp.indielab.link`)"
+      - traefik.http.routers.sn-mcp-http.entryPoints=http
+      - traefik.http.routers.sn-mcp-http.middlewares=sn-mcp-redirect
+      - traefik.http.middlewares.sn-mcp-redirect.redirectscheme.scheme=https
+      # Basic-auth middleware — MCP_BASIC_AUTH must already have `$` escaped as `$$`
+      - "traefik.http.middlewares.sn-mcp-auth.basicauth.users=${MCP_BASIC_AUTH}"
+      # Backend
+      - traefik.http.services.sn-mcp-svc.loadbalancer.server.port=3000
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
