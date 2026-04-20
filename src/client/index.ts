@@ -38,7 +38,7 @@ export class ServiceNowClient {
   ): Promise<SNPaginatedResult> {
     const url = this.buildTableUrl(tableName, params);
     const response = await this.request("GET", url);
-    const data = (await response.json()) as SNListResponse;
+    const data = await this.parseJson<SNListResponse>(response, "GET", url);
 
     const totalHeader = response.headers.get("X-Total-Count");
     const totalCount = totalHeader ? parseInt(totalHeader, 10) : undefined;
@@ -73,7 +73,7 @@ export class ServiceNowClient {
     const qs = query.toString();
     const url = `${this.baseUrl}/api/now/table/${tableName}/${sysId}${qs ? `?${qs}` : ""}`;
     const response = await this.request("GET", url);
-    const data = (await response.json()) as SNSingleResponse;
+    const data = await this.parseJson<SNSingleResponse>(response, "GET", url);
     return data.result;
   }
 
@@ -87,7 +87,7 @@ export class ServiceNowClient {
   ): Promise<SNRecord> {
     const url = `${this.baseUrl}/api/now/table/${tableName}`;
     const response = await this.request("POST", url, body);
-    const data = (await response.json()) as SNSingleResponse;
+    const data = await this.parseJson<SNSingleResponse>(response, "POST", url);
     return data.result;
   }
 
@@ -102,7 +102,7 @@ export class ServiceNowClient {
   ): Promise<SNRecord> {
     const url = `${this.baseUrl}/api/now/table/${tableName}/${sysId}`;
     const response = await this.request("PATCH", url, body);
-    const data = (await response.json()) as SNSingleResponse;
+    const data = await this.parseJson<SNSingleResponse>(response, "PATCH", url);
     return data.result;
   }
 
@@ -189,5 +189,26 @@ export class ServiceNowClient {
     }
 
     return response;
+  }
+
+  /**
+   * Parse a 2xx Response as JSON, with a useful error if the body isn't JSON.
+   * SN instances sometimes return 200 + HTML (SSO/login redirect) when auth is
+   * misconfigured — bare `response.json()` swallows that as "Failed to parse JSON".
+   */
+  private async parseJson<T>(response: Response, method: string, url: string): Promise<T> {
+    const text = await response.text();
+    const ct = response.headers.get("content-type") ?? "";
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      const preview = text.slice(0, 300).replace(/\s+/g, " ");
+      throw new Error(
+        `ServiceNow returned non-JSON body for ${method} ${url} ` +
+          `(status ${response.status}, content-type "${ct}"). ` +
+          `This usually means an SSO/login page was returned because credentials are invalid ` +
+          `or the wrong instance is selected. Body preview: ${preview}`
+      );
+    }
   }
 }
